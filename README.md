@@ -71,6 +71,6 @@ Without HACS cards, the built-in **Map** card can show a pin for each `sensor.er
 ## Development
 
 ```sh
-python3 -m venv .venv && .venv/bin/pip install pytest-homeassistant-custom-component
+python3 -m venv .venv && .venv/bin/pip install -r requirements_test.txt
 .venv/bin/pytest
 ```
