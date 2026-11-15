@@ -8,7 +8,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE, CONF_RADIUS
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
@@ -82,6 +82,8 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
         # followed by a good one) never re-announces them. None until loaded;
         # stays None on the very first run so existing outages form a baseline.
         self._known: dict[str, dict[str, Any]] | None = None
+        self._entities_ready = False
+        self._pending_events: list[tuple[str, dict[str, Any]]] = []
 
     async def _async_setup(self) -> None:
         """Load the saved snapshot before the first refresh."""
@@ -108,23 +110,43 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
                 len(outages),
             )
         else:
-            # Lets automations attach the map without hard-coding an entity ID.
-            map_entity_id = er.async_get(self.hass).async_get_entity_id(
-                "image", DOMAIN, f"{self.config_entry.entry_id}_outage_map"
-            )
-            for kind, summary in events:
-                self.hass.bus.async_fire(
-                    _EVENT_TYPES[kind],
-                    {
-                        "config_entry_id": self.config_entry.entry_id,
-                        "location": self.config_entry.title,
-                        "map_entity_id": map_entity_id,
-                        **summary,
-                    },
-                )
+            self._pending_events.extend(events)
 
         if snapshot != self._known:
             self._known = snapshot
             await self._store.async_save({"outages": snapshot})
 
+        if self._entities_ready:
+            # Deferred so listeners see the coordinator's new data first.
+            self.hass.loop.call_soon(self._async_fire_pending_events)
         return outages
+
+    @callback
+    def async_entities_ready(self) -> None:
+        """Called once all platforms are set up; releases held-back events.
+
+        Events found by the first poll after a start or reload are held until
+        the entities (notably the map image) exist, so automations can use them.
+        """
+        self._entities_ready = True
+        self._async_fire_pending_events()
+
+    @callback
+    def _async_fire_pending_events(self) -> None:
+        if not self._pending_events:
+            return
+        # Lets automations attach the map without hard-coding an entity ID.
+        map_entity_id = er.async_get(self.hass).async_get_entity_id(
+            "image", DOMAIN, f"{self.config_entry.entry_id}_outage_map"
+        )
+        events, self._pending_events = self._pending_events, []
+        for kind, summary in events:
+            self.hass.bus.async_fire(
+                _EVENT_TYPES[kind],
+                {
+                    "config_entry_id": self.config_entry.entry_id,
+                    "location": self.config_entry.title,
+                    "map_entity_id": map_entity_id,
+                    **summary,
+                },
+            )

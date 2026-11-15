@@ -19,6 +19,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ErgonConfigEntry) -> boo
     entry.runtime_data = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    coordinator.async_entities_ready()
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
 

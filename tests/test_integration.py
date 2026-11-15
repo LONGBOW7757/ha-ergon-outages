@@ -313,3 +313,45 @@ async def test_outage_map_image(hass: HomeAssistant, aioclient_mock, hass_client
         await hass.async_block_till_done()
         assert hass.states.get(map_id).state != first_updated
         assert events[0].data["map_entity_id"] == map_id
+
+
+async def test_notification_gets_map_on_startup(hass: HomeAssistant, aioclient_mock, hass_storage) -> None:
+    """Regression: an outage found on the first poll after a start (e.g. the
+    first start after upgrading to the version with the map) was announced
+    before the map entity existed, so the notification had no image."""
+    from pathlib import Path
+    from unittest.mock import patch
+
+    import yaml
+
+    from homeassistant.components import automation
+    from homeassistant.setup import async_setup_component
+    from pytest_homeassistant_custom_component.common import async_mock_service
+
+    calls = async_mock_service(hass, "notify", "notify")
+    example = Path(__file__).parent.parent / "examples" / "notifications.yaml"
+    assert await async_setup_component(
+        hass, automation.DOMAIN, {automation.DOMAIN: [yaml.safe_load(example.read_text())]}
+    )
+    await hass.async_block_till_done()
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    # Previous run already recorded a snapshot (no outages), as after an upgrade.
+    hass_storage[f"{DOMAIN}.{entry.entry_id}"] = {
+        "version": 1, "minor_version": 1, "key": f"{DOMAIN}.{entry.entry_id}",
+        "data": {"outages": {}},
+    }
+    now = dt_util.utcnow()
+    _mock(aioclient_mock, collection(feature("26PL9", start=now + timedelta(days=5), customers=2)))
+    with patch(
+        "custom_components.ergon_outages.image.ErgonOutageMapImage._async_fetch_tile",
+        return_value=None,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert len(calls) == 1
+    assert calls[0].data["title"] == "📅 Planned outage scheduled"
+    image = calls[0].data["data"]["image"]
+    assert image.startswith("/api/image_proxy/image.ergon_outages_home_outage_map?token=")

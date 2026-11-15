@@ -23,7 +23,7 @@ MAP_WIDTH = 640
 MAP_HEIGHT = 400
 _PADDING = 48
 _MIN_ZOOM = 5
-_MAX_ZOOM = 17
+_MAX_ZOOM = 17  # keeps a few streets of context around very small outages
 _SCALE = 2  # overlay supersampling for smooth edges
 
 RGB = tuple[int, int, int]
@@ -97,14 +97,18 @@ def plan_map(
     width: int = MAP_WIDTH,
     height: int = MAP_HEIGHT,
 ) -> MapPlan:
-    """Pick the closest zoom that fits the home circle and every polygon."""
-    lat, lon = home
-    r = max(radius_m, 100.0)
-    dlat = r / 111_320
-    dlon = r / (111_320 * max(math.cos(math.radians(lat)), 0.01))
-    points = [(lon - dlon, lat - dlat), (lon + dlon, lat + dlat)]
-    for ring in iter_rings(geometries):
-        points.extend((pt[0], pt[1]) for pt in ring)
+    """Pick the closest zoom that frames the outages.
+
+    With outages, the view fits just their polygons (the search circle may be
+    much larger and would leave them tiny). With none, it shows the circle.
+    """
+    points = [(pt[0], pt[1]) for ring in iter_rings(geometries) for pt in ring]
+    if not points:
+        lat, lon = home
+        r = max(radius_m, 100.0)
+        dlat = r / 111_320
+        dlon = r / (111_320 * max(math.cos(math.radians(lat)), 0.01))
+        points = [(lon - dlon, lat - dlat), (lon + dlon, lat + dlat)]
 
     zoom = _MIN_ZOOM
     for z in range(_MAX_ZOOM, _MIN_ZOOM - 1, -1):

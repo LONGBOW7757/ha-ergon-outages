@@ -60,7 +60,7 @@ A ready-made automation is in [examples/notifications.yaml](examples/notificatio
 
 **Notifications with a map:** the example automation attaches the `Outage map` picture to new and started outage alerts. Your phone downloads it from Home Assistant when the alert arrives, so this only works if the phone can reach Home Assistant at that moment (on home Wi‑Fi, or anywhere with remote access such as Home Assistant Cloud). Otherwise the alert arrives without the picture.
 
-The map zooms to fit your search circle plus any outage areas, so a smaller radius gives a closer view. Map tiles come from OpenStreetMap and are only downloaded when the outages change.
+The map zooms to fit the outage areas found within your radius (or shows the whole search circle when there are none). Map tiles come from OpenStreetMap and are only downloaded when the outages change.
 
 To show the map on a dashboard, add a **Picture entity** card or an **Image** card using `image.ergon_outages_home_outage_map`.
 

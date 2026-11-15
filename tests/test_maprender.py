@@ -24,19 +24,31 @@ def _square(lon: float, lat: float, d: float) -> dict:
     }
 
 
-def test_plan_zooms_to_fit_everything() -> None:
-    near = plan_map(HOME, 250, [])
-    far = plan_map(HOME, 250, [_square(146.30, -26.40, 0.002)])  # ~5.5 km east
-    assert near.zoom > far.zoom
-    for plan, geoms in ((near, []), (far, [_square(146.30, -26.40, 0.002)])):
-        hx, hy = plan.to_image(HOME[1], HOME[0])
-        assert 0 < hx < MAP_WIDTH and 0 < hy < MAP_HEIGHT
-        for g in geoms:
-            for lon, lat in g["coordinates"][0]:
-                x, y = plan.to_image(lon, lat)
-                assert 0 <= x <= MAP_WIDTH and 0 <= y <= MAP_HEIGHT
-    assert 1 <= len(near.tiles()) <= 12
-    assert near.tile_url(near.tiles()[0]).startswith(f"https://tile.openstreetmap.org/{near.zoom}/")
+def _inside(plan, lon, lat) -> bool:
+    x, y = plan.to_image(lon, lat)
+    return 0 <= x <= MAP_WIDTH and 0 <= y <= MAP_HEIGHT
+
+
+def test_no_outages_shows_search_circle() -> None:
+    plan = plan_map(HOME, 2000, [])
+    assert _inside(plan, HOME[1], HOME[0])
+    assert _inside(plan, HOME[1] + 0.019, HOME[0])  # ~1.9 km east, inside circle
+    assert 1 <= len(plan.tiles()) <= 12
+    assert plan.tile_url(plan.tiles()[0]).startswith(f"https://tile.openstreetmap.org/{plan.zoom}/")
+
+
+def test_outages_are_framed_not_the_radius() -> None:
+    a = _square(146.30, -26.40, 0.002)    # ~5.5 km east
+    b = _square(146.31, -26.405, 0.001)
+    radius_only = plan_map(HOME, 10_000, [])
+    framed = plan_map(HOME, 10_000, [a, b])
+    assert framed.zoom > radius_only.zoom + 2
+    for g in (a, b):
+        assert all(_inside(framed, lon, lat) for lon, lat in g["coordinates"][0])
+
+
+def test_tiny_outage_zoom_is_capped() -> None:
+    assert plan_map(HOME, 250, [_square(146.245, -26.401, 0.0001)]).zoom == 17
 
 
 def test_compose_without_tiles_still_draws_outage() -> None:
