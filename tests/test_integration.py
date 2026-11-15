@@ -261,3 +261,11 @@ async def test_zero_radius_is_exact_point(hass: HomeAssistant, aioclient_mock, r
     assert await hass.config_entries.async_setup(entry.entry_id)
     _, url, _, _ = aioclient_mock.mock_calls[-1]
     assert "distance" not in url.query
+
+
+async def test_brand_icon_is_bundled(hass: HomeAssistant) -> None:
+    """HA serves custom integration icons from the brand/ folder."""
+    from homeassistant.loader import async_get_integration
+
+    integration = await async_get_integration(hass, DOMAIN)
+    assert integration.has_branding
