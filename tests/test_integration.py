@@ -315,7 +315,9 @@ async def test_outage_map_image(hass: HomeAssistant, aioclient_mock, hass_client
         assert events[0].data["map_entity_id"] == map_id
 
 
-async def test_notification_gets_map_on_startup(hass: HomeAssistant, aioclient_mock, hass_storage) -> None:
+async def test_notification_gets_map_on_startup(
+    hass: HomeAssistant, aioclient_mock, hass_storage, hass_client_no_auth
+) -> None:
     """Regression: an outage found on the first poll after a start (e.g. the
     first start after upgrading to the version with the map) was announced
     before the map entity existed, so the notification had no image."""
@@ -351,7 +353,27 @@ async def test_notification_gets_map_on_startup(hass: HomeAssistant, aioclient_m
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-    assert len(calls) == 1
-    assert calls[0].data["title"] == "📅 Planned outage scheduled"
-    image = calls[0].data["data"]["image"]
-    assert image.startswith("/api/image_proxy/image.ergon_outages_home_outage_map?token=")
+        assert len(calls) == 1
+        assert calls[0].data["title"] == "📅 Planned outage scheduled"
+        image = calls[0].data["data"]["image"]
+        assert image.startswith("/api/ergon_outages/map/") and image.endswith(".png")
+
+        # The phone downloads it without logging in...
+        client = await hass_client_no_auth()
+        resp = await client.get(image)
+        assert resp.status == 200
+        assert resp.headers["Content-Type"] == "image/png"
+        first = await resp.read()
+        assert first[:4] == b"\x89PNG"
+
+        # ...and gets the same snapshot when it re-downloads much later, even
+        # after the image entity's own token has rotated and outages changed.
+        _mock(aioclient_mock, collection())
+        await entry.runtime_data.async_refresh()
+        await hass.async_block_till_done()
+        resp = await client.get(image)
+        assert resp.status == 200 and await resp.read() == first
+
+        # Unknown tokens are rejected.
+        resp = await client.get("/api/ergon_outages/map/AAAAAAAAAAAAAAAAAAAAAAAA.png")
+        assert resp.status == 404

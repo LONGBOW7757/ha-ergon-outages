@@ -50,7 +50,7 @@ The integration fires these events. Each happens **once per outage change**, and
 | `ergon_outages_outage_updated` | Status, start, restoration time or customer count changed |
 | `ergon_outages_outage_cleared` | The outage is no longer listed |
 
-Event data: `event_id`, `phase`, `outage_type` (`planned`/`unplanned`), `status`, `reason`, `customers_affected`, `suburbs`, `start`, `estimated_restoration` (ISO times or `null`), `location`, `config_entry_id`, `map_entity_id`.
+Event data: `event_id`, `phase`, `outage_type` (`planned`/`unplanned`), `status`, `reason`, `customers_affected`, `suburbs`, `start`, `estimated_restoration` (ISO times or `null`), `location`, `config_entry_id`, `map_entity_id`, and `map_url` (a picture of the map for this alert; the link works without a login for 7 days, so it's safe to attach to phone notifications; not included for cleared events).
 
 Outages that already exist when you first add the integration are recorded quietly (no burst of alerts on day one). They still show up in the entities.
 

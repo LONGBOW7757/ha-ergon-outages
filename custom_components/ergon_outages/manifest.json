@@ -1,12 +1,17 @@
 {
   "domain": "ergon_outages",
   "name": "Ergon Energy Outages",
-  "codeowners": ["@LONGBOW7757"],
+  "codeowners": [
+    "@LONGBOW7757"
+  ],
   "config_flow": true,
+  "dependencies": [
+    "http"
+  ],
   "documentation": "https://github.com/LONGBOW7757/ha-ergon-outages",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/LONGBOW7757/ha-ergon-outages/issues",
   "requirements": [],
-  "version": "0.2.1"
+  "version": "0.3.0"
 }

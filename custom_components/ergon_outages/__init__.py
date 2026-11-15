@@ -8,12 +8,14 @@ from homeassistant.helpers.storage import Store
 
 from .const import STORAGE_VERSION, storage_key
 from .coordinator import ErgonConfigEntry, ErgonOutagesCoordinator
+from .maplinks import async_setup_map_links
 
 PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.IMAGE, Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ErgonConfigEntry) -> bool:
     """Set up Ergon Energy Outages from a config entry."""
+    async_setup_map_links(hass)
     coordinator = ErgonOutagesCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator

@@ -16,6 +16,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import ErgonApiError, async_query_outages
+from .maplinks import async_create_map_link
 from .const import (
     CONF_SCAN_INTERVAL,
     DEFAULT_RADIUS_M,
@@ -83,6 +84,8 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
         # stays None on the very first run so existing outages form a baseline.
         self._known: dict[str, dict[str, Any]] | None = None
         self._entities_ready = False
+        # Set by the image platform; used to render notification snapshots.
+        self.map_image: Any = None
         self._pending_events: list[tuple[str, dict[str, Any]]] = []
 
     async def _async_setup(self) -> None:
@@ -140,6 +143,12 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
             "image", DOMAIN, f"{self.config_entry.entry_id}_outage_map"
         )
         events, self._pending_events = self._pending_events, []
+        # One long-lived snapshot link per batch, for notification images.
+        map_url = (
+            async_create_map_link(self.hass, self.config_entry.entry_id)
+            if self.map_image is not None and any(kind != KIND_CLEARED for kind, _ in events)
+            else None
+        )
         for kind, summary in events:
             self.hass.bus.async_fire(
                 _EVENT_TYPES[kind],
@@ -147,6 +156,7 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
                     "config_entry_id": self.config_entry.entry_id,
                     "location": self.config_entry.title,
                     "map_entity_id": map_entity_id,
+                    "map_url": map_url if kind != KIND_CLEARED else None,
                     **summary,
                 },
             )

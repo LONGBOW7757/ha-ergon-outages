@@ -55,6 +55,7 @@ class ErgonOutageMapImage(ErgonOutagesEntity, ImageEntity):
         self._render_lock = asyncio.Lock()
         self._tile_cache: dict[str, bytes] = {}
         self._refresh_signature()
+        coordinator.map_image = self
 
     def _current_signature(self) -> str:
         parts = [
