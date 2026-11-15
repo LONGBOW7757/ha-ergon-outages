@@ -9,6 +9,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE, CONF_RADIUS
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -107,12 +108,17 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
                 len(outages),
             )
         else:
+            # Lets automations attach the map without hard-coding an entity ID.
+            map_entity_id = er.async_get(self.hass).async_get_entity_id(
+                "image", DOMAIN, f"{self.config_entry.entry_id}_outage_map"
+            )
             for kind, summary in events:
                 self.hass.bus.async_fire(
                     _EVENT_TYPES[kind],
                     {
                         "config_entry_id": self.config_entry.entry_id,
                         "location": self.config_entry.title,
+                        "map_entity_id": map_entity_id,
                         **summary,
                     },
                 )

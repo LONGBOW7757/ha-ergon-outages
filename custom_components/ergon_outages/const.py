@@ -38,6 +38,11 @@ EVENT_OUTAGE_CLEARED: Final = f"{DOMAIN}_outage_cleared"
 
 ATTRIBUTION: Final = "Data provided by Ergon Energy"
 
+# The OpenStreetMap tile policy requires an identifying User-Agent.
+TILE_USER_AGENT: Final = (
+    "HomeAssistant-ErgonOutages/0.2 (+https://github.com/LONGBOW7757/ha-ergon-outages)"
+)
+
 
 def storage_key(entry_id: str) -> str:
     """Return the storage key used to remember already-announced outages."""

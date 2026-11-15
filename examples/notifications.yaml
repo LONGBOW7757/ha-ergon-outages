@@ -30,8 +30,14 @@ actions:
       restore: >-
         {{ as_timestamp(o.estimated_restoration) | timestamp_custom('%a %-d %b, %-I:%M %p')
            if o.estimated_restoration else 'not yet known' }}
+      # Map snapshot (red = now, orange = upcoming). The link carries a
+      # short-lived token, so the phone app can download it straight away.
+      map_url: >-
+        {{ state_attr(o.map_entity_id, 'entity_picture') if o.map_entity_id else none }}
   - action: notify.notify
     data:
+      data: >-
+        {{ {'image': map_url} if map_url and trigger.id != 'cleared' else {} }}
       title: >-
         {% if trigger.id == 'cleared' %}✅ Power outage cleared
         {% elif trigger.id == 'updated' %}🔄 Outage update

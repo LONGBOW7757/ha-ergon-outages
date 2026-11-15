@@ -41,6 +41,9 @@
       "outage_now": { "name": "Outage now" },
       "upcoming_outage": { "name": "Upcoming outage" }
     },
+    "image": {
+      "outage_map": { "name": "Outage map" }
+    },
     "sensor": {
       "current_outages": { "name": "Current outages" },
       "upcoming_outages": { "name": "Upcoming outages" },

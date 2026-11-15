@@ -30,6 +30,7 @@ Entity IDs below assume the location is named `Home`.
 |---|---|
 | `binary_sensor.ergon_outages_home_outage_now` | **On** while an outage covers the location. The `geojson` attribute holds the outage areas. |
 | `binary_sensor.ergon_outages_home_upcoming_outage` | **On** while a planned outage is scheduled. The `geojson` attribute holds the outage areas. |
+| `image.ergon_outages_home_outage_map` | Map picture of the area: your location and search circle, current outages in red, upcoming ones in orange. Used for notification images and dashboards. |
 | `sensor.ergon_outages_home_current_outages` | Number of outages happening now |
 | `sensor.ergon_outages_home_upcoming_outages` | Number of scheduled outages |
 | `sensor.ergon_outages_home_next_outage_start` | When the next planned outage starts |
@@ -49,7 +50,7 @@ The integration fires these events. Each happens **once per outage change**, and
 | `ergon_outages_outage_updated` | Status, start, restoration time or customer count changed |
 | `ergon_outages_outage_cleared` | The outage is no longer listed |
 
-Event data: `event_id`, `phase`, `outage_type` (`planned`/`unplanned`), `status`, `reason`, `customers_affected`, `suburbs`, `start`, `estimated_restoration` (ISO times or `null`), `location`, `config_entry_id`.
+Event data: `event_id`, `phase`, `outage_type` (`planned`/`unplanned`), `status`, `reason`, `customers_affected`, `suburbs`, `start`, `estimated_restoration` (ISO times or `null`), `location`, `config_entry_id`, `map_entity_id`.
 
 Outages that already exist when you first add the integration are recorded quietly (no burst of alerts on day one). They still show up in the entities.
 
@@ -57,7 +58,13 @@ A ready-made automation is in [examples/notifications.yaml](examples/notificatio
 
 ## Map
 
-Install **Map Card** (`nathan-gs/ha-map-card`) from HACS, then add a manual card with [examples/map-card.yaml](examples/map-card.yaml). Current outages are drawn in red and upcoming ones in orange; hover over an area for details.
+**Notifications with a map:** the example automation attaches the `Outage map` picture to new and started outage alerts. Your phone downloads it from Home Assistant when the alert arrives, so this only works if the phone can reach Home Assistant at that moment (on home Wi‑Fi, or anywhere with remote access such as Home Assistant Cloud). Otherwise the alert arrives without the picture.
+
+The map zooms to fit your search circle plus any outage areas, so a smaller radius gives a closer view. Map tiles come from OpenStreetMap and are only downloaded when the outages change.
+
+To show the map on a dashboard, add a **Picture entity** card or an **Image** card using `image.ergon_outages_home_outage_map`.
+
+For an interactive map, install **Map Card** (`nathan-gs/ha-map-card`) from HACS, then add a manual card with [examples/map-card.yaml](examples/map-card.yaml). Current outages are drawn in red and upcoming ones in orange; hover over an area for details.
 
 Without HACS cards, the built-in **Map** card can show a pin for each `sensor.ergon_outages_home_outage_*` entity (at the centre of the outage area), but it can't draw the areas themselves.
 

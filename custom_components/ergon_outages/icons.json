@@ -10,6 +10,9 @@
         "state": { "on": "mdi:calendar-alert" }
       }
     },
+    "image": {
+      "outage_map": { "default": "mdi:map-marker-radius" }
+    },
     "sensor": {
       "current_outages": { "default": "mdi:transmission-tower-off" },
       "upcoming_outages": { "default": "mdi:calendar-clock" },

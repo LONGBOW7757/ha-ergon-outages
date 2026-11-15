@@ -9,7 +9,7 @@ from homeassistant.helpers.storage import Store
 from .const import STORAGE_VERSION, storage_key
 from .coordinator import ErgonConfigEntry, ErgonOutagesCoordinator
 
-PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.IMAGE, Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ErgonConfigEntry) -> bool:

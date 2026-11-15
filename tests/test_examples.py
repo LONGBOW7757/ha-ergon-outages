@@ -34,7 +34,8 @@ async def test_notification_example(hass: HomeAssistant) -> None:
     assert await async_setup_component(hass, automation.DOMAIN, {automation.DOMAIN: [config]})
     await hass.async_block_till_done()
 
-    hass.bus.async_fire("ergon_outages_new_outage", {**BASE, "phase": "current"})
+    hass.states.async_set("image.map", "x", {"entity_picture": "/api/image_proxy/image.map?token=abc"})
+    hass.bus.async_fire("ergon_outages_new_outage", {**BASE, "phase": "current", "map_entity_id": "image.map"})
     hass.bus.async_fire("ergon_outages_new_outage", {**BASE, "event_id": "26BB2", "phase": "future", "outage_type": "planned"})
     hass.bus.async_fire("ergon_outages_outage_cleared", {**BASE, "phase": "current"})
     await hass.async_block_till_done()
@@ -50,4 +51,7 @@ async def test_notification_example(hass: HomeAssistant) -> None:
         "Start: Sun 15 Nov, 2:00 PM · Restore: not yet known",
         "Customers affected: 150",
     ]
+    assert calls[0].data["data"] == {"image": "/api/image_proxy/image.map?token=abc"}
+    assert calls[1].data["data"] == {}  # no map entity in the event
+    assert calls[2].data["data"] == {}  # cleared: no map
     assert calls[2].data["message"] == "Outage 26AA1 near Home is no longer listed by Ergon."

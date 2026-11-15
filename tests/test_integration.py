@@ -269,3 +269,47 @@ async def test_brand_icon_is_bundled(hass: HomeAssistant) -> None:
 
     integration = await async_get_integration(hass, DOMAIN)
     assert integration.has_branding
+
+
+async def test_outage_map_image(hass: HomeAssistant, aioclient_mock, hass_client, freezer) -> None:
+    """The map image renders, and only changes when the outages change."""
+    from unittest.mock import patch
+
+    now = dt_util.utcnow()
+    current = feature("26AA1", start=now - timedelta(hours=1))
+    _mock(aioclient_mock, collection(current))
+    entry = _entry()
+    entry.add_to_hass(hass)
+    with patch(
+        "custom_components.ergon_outages.image.ErgonOutageMapImage._async_fetch_tile",
+        return_value=None,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        map_id = "image.ergon_outages_home_outage_map"
+        state = hass.states.get(map_id)
+        assert state is not None
+        first_updated = state.state
+        assert state.attributes["entity_picture"].startswith(f"/api/image_proxy/{map_id}?token=")
+
+        client = await hass_client()
+        resp = await client.get(f"/api/image_proxy/{map_id}")
+        assert resp.status == 200
+        assert resp.content_type == "image/png"
+        assert (await resp.read())[:8] == b"\x89PNG\r\n\x1a\n"
+
+        # Same outages: picture unchanged.
+        coordinator = entry.runtime_data
+        freezer.tick(timedelta(minutes=5))
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+        assert hass.states.get(map_id).state == first_updated
+
+        # New outage: picture changes and the event points at the map.
+        events = async_capture_events(hass, EVENT_NEW_OUTAGE)
+        _mock(aioclient_mock, collection(current, feature("26BB2", start=now + timedelta(days=1))))
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+        assert hass.states.get(map_id).state != first_updated
+        assert events[0].data["map_entity_id"] == map_id
