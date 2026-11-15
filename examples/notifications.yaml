@@ -1,0 +1,48 @@
+# Ergon outage notifications
+# Paste into Settings > Automations & Scenes > Create automation > ⋮ > Edit in YAML.
+# Replace notify.notify with your phone, e.g. notify.mobile_app_your_phone.
+#
+# The integration fires one event per outage change, and remembers what it has
+# already announced (across restarts), so you only ever get one alert per event.
+alias: Ergon outage alerts
+description: Phone alerts for new, starting and cleared Ergon outages
+mode: queued
+triggers:
+  - trigger: event
+    event_type: ergon_outages_new_outage
+    id: new
+  - trigger: event
+    event_type: ergon_outages_outage_started
+    id: started
+  - trigger: event
+    event_type: ergon_outages_outage_cleared
+    id: cleared
+  # Optional: status / estimated restoration changes. Can be chatty during storms.
+  # - trigger: event
+  #   event_type: ergon_outages_outage_updated
+  #   id: updated
+actions:
+  - variables:
+      o: "{{ trigger.event.data }}"
+      start: >-
+        {{ as_timestamp(o.start) | timestamp_custom('%a %-d %b, %-I:%M %p')
+           if o.start else 'now' }}
+      restore: >-
+        {{ as_timestamp(o.estimated_restoration) | timestamp_custom('%a %-d %b, %-I:%M %p')
+           if o.estimated_restoration else 'not yet known' }}
+  - action: notify.notify
+    data:
+      title: >-
+        {% if trigger.id == 'cleared' %}✅ Power outage cleared
+        {% elif trigger.id == 'updated' %}🔄 Outage update
+        {% elif o.phase == 'current' %}⚡ Power outage now
+        {% else %}📅 Planned outage scheduled{% endif %}
+      message: |-
+        {%- if trigger.id == 'cleared' -%}
+        Outage {{ o.event_id }} near {{ o.location }} is no longer listed by Ergon.
+        {%- else -%}
+        {{ o.reason or 'Power interruption' }}
+        {{ (o.outage_type or '') | capitalize }} · {{ o.status or 'Status unknown' }}
+        Start: {{ start }} · Restore: {{ restore }}
+        Customers affected: {{ o.customers_affected if o.customers_affected is not none else 'unknown' }}
+        {%- endif %}

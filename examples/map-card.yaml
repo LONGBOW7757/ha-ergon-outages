@@ -1,0 +1,20 @@
+# Outage polygons on a map: red = happening now, orange = upcoming.
+# Needs "Map Card" (nathan-gs/ha-map-card) from HACS > Frontend.
+# Entity IDs assume you named the location "Home" during setup.
+type: custom:map-card
+focus_entity: zone.home
+zoom: 14
+entities:
+  - entity: zone.home
+  - entity: binary_sensor.ergon_outages_home_outage_now
+    geojson:
+      attribute: geojson
+      color: "#e53935"
+      fill_opacity: 0.35
+      hide_marker: true
+  - entity: binary_sensor.ergon_outages_home_upcoming_outage
+    geojson:
+      attribute: geojson
+      color: "#fb8c00"
+      fill_opacity: 0.25
+      hide_marker: true
