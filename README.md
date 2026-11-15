@@ -7,6 +7,8 @@ Know when the power is out, or about to be, at your place. This custom integrati
 - fires one event per change, so notifications never repeat every poll or after a restart
 
 > Unofficial. It reads the ArcGIS layer behind Ergon's public Outage Finder map, which isn't a documented API and could change without notice. Energex (south-east Queensland) is not covered.
+>
+> This project is not affiliated with, endorsed by or supported by Ergon Energy. The Ergon Energy name and logo are trademarks of Ergon Energy Corporation Limited and are used only to identify the service this integration reads from.
 
 ## Install
 
