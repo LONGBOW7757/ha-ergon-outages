@@ -354,7 +354,7 @@ async def test_notification_gets_map_on_startup(
         await hass.async_block_till_done()
 
         assert len(calls) == 1
-        assert calls[0].data["title"] == "📅 Planned outage scheduled"
+        assert calls[0].data["title"] == "📅 Planned outage · Home"
         image = calls[0].data["data"]["image"]
         assert image.startswith("/api/ergon_outages/map/") and image.endswith(".png")
 

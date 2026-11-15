@@ -40,9 +40,9 @@ async def test_notification_example(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     assert [c.data["title"] for c in calls] == [
-        "⚡ Power outage now",
-        "📅 Planned outage scheduled",
-        "✅ Power outage cleared",
+        "⚡ Power outage now · Home",
+        "📅 Planned outage · Home",
+        "✅ Outage cleared · Home",
     ]
     assert calls[0].data["message"].splitlines() == [
         "Due to damage requiring emergency repairs.",
@@ -53,4 +53,4 @@ async def test_notification_example(hass: HomeAssistant) -> None:
     assert calls[0].data["data"] == {"image": "/api/ergon_outages/map/abc.png"}
     assert calls[1].data["data"] == {}  # no map link in the event
     assert calls[2].data["data"] == {}  # cleared: no map
-    assert calls[2].data["message"] == "Outage 26AA1 near Home is no longer listed by Ergon."
+    assert calls[2].data["message"] == "Outage 26AA1 is no longer listed by Ergon."

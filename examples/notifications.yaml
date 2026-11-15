@@ -4,6 +4,7 @@
 #
 # The integration fires one event per outage change, and remembers what it has
 # already announced (across restarts), so you only ever get one alert per event.
+# One automation covers every location you've added to the integration.
 alias: Ergon outage alerts
 description: Phone alerts for new, starting and cleared Ergon outages
 mode: queued
@@ -36,14 +37,16 @@ actions:
       # link that keeps working for 7 days.
       data: >-
         {{ {'image': o.map_url} if o.map_url else {} }}
+      # Every title names the location, so several locations can share
+      # this one automation.
       title: >-
-        {% if trigger.id == 'cleared' %}✅ Power outage cleared
-        {% elif trigger.id == 'updated' %}🔄 Outage update
-        {% elif o.phase == 'current' %}⚡ Power outage now
-        {% else %}📅 Planned outage scheduled{% endif %}
+        {% if trigger.id == 'cleared' %}✅ Outage cleared
+        {%- elif trigger.id == 'updated' %}🔄 Outage update
+        {%- elif o.phase == 'current' %}⚡ Power outage now
+        {%- else %}📅 Planned outage{% endif %} · {{ o.location }}
       message: |-
         {%- if trigger.id == 'cleared' -%}
-        Outage {{ o.event_id }} near {{ o.location }} is no longer listed by Ergon.
+        Outage {{ o.event_id }} is no longer listed by Ergon.
         {%- else -%}
         {{ o.reason or 'Power interruption' }}
         {{ (o.outage_type or '') | capitalize }} · {{ o.status or 'Status unknown' }}
