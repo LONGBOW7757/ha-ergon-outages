@@ -74,3 +74,10 @@ Without HACS cards, the built-in **Map** card can show a pin for each `sensor.er
 python3 -m venv .venv && .venv/bin/pip install -r requirements_test.txt
 .venv/bin/pytest
 ```
+
+### Releasing
+
+1. Bump `version` in `custom_components/ergon_outages/manifest.json` and commit.
+2. Tag and push: `git tag v0.3.1 && git push origin v0.3.1`
+
+The Release workflow publishes a GitHub release for the tag, and HACS shows it as an update.
