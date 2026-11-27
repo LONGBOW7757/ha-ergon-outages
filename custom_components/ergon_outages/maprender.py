@@ -311,8 +311,8 @@ def compose_map(
             draw.polygon(points, fill=color + (100,))
             draw.line(points + [points[0]], fill=color + (255,), width=3 * s, joint="curve")
 
-    # Feeder lines: opaque, ~2/3 the width of an outage outline, with a faint
-    # white edge so they stand out from the map underneath.
+    # Feeder lines: opaque, ~2/3 the width of an outage outline, with a thin
+    # black outline so light colours (e.g. cyan) stand out from the map.
     paths = [
         (color, [px(pt[0], pt[1]) for pt in path])
         for color, geometry in lines
@@ -320,7 +320,7 @@ def compose_map(
         if len(path) >= 2
     ]
     for _, points in paths:
-        draw.line(points, fill=(255, 255, 255, 150), width=4 * s, joint="curve")
+        draw.line(points, fill=(0, 0, 0, 230), width=3 * s, joint="curve")
     for color, points in paths:
         draw.line(points, fill=color + (255,), width=2 * s, joint="curve")
 
@@ -433,7 +433,9 @@ def compose_details(
         draw.text((_PAD, y + 1), legend_label, font=label_font, fill=_MUTED)
         for i, (color, text) in enumerate(legend):
             ly = y + i * line_h
-            draw.line([(_PAD + _LABEL_W, ly + 10), (_PAD + _LABEL_W + 22, ly + 10)], fill=color, width=4)
+            swatch = [(_PAD + _LABEL_W, ly + 10), (_PAD + _LABEL_W + 22, ly + 10)]
+            draw.line(swatch, fill=(0, 0, 0), width=6)  # same black outline as the map
+            draw.line(swatch, fill=color, width=4)
             draw.text((_PAD + _LABEL_W + 32, ly), text, font=value_font, fill=_TEXT)
 
     out = BytesIO()

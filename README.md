@@ -84,7 +84,7 @@ Without HACS cards, the built-in **Map** card can show a pin for each `sensor.er
 
 ## Power lines (feeders)
 
-Maps can show the local 11/22 kV **MV feeder lines** from Energy Queensland's public Network Capacity Map. Each feeder gets its own colour, and feeders running close together get strongly contrasting colours. The lines are thin and opaque and drawn over the outage shading, so you can see which lines run through an outage. A tapped alert's details panel lists the feeders through that outage with a colour key.
+Maps can show the local 11/22 kV **MV feeder lines** from Energy Queensland's public Network Capacity Map. Each feeder gets its own colour, and feeders running close together get strongly contrasting colours. The lines are thin, opaque and outlined in black (so light colours stay readable), drawn over the outage shading, so you can see which lines run through an outage. A tapped alert's details panel lists the feeders through that outage with a colour key.
 
 Turn this on or off per location with **Show power lines on maps** (**Configure**). Line data is downloaded only when a map is drawn, simplified to the map's resolution and cached for a day. Like the outage data, this is an unofficial use of a public map layer and may change without notice.
 
