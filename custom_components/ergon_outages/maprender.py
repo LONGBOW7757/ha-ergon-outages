@@ -197,3 +197,80 @@ def compose_map(
     out = BytesIO()
     image.convert("RGB").save(out, format="PNG", optimize=True)
     return out.getvalue()
+
+
+# ── Details panel (drawn under a map for the per-outage pop-up) ─────────────
+
+_PANEL_BG = (255, 255, 255)
+_TEXT = (33, 33, 33)
+_MUTED = (110, 110, 110)
+_RULE = (225, 225, 225)
+_PAD = 20
+_LABEL_W = 150
+
+
+def _font(size: int) -> ImageFont.ImageFont:
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:  # Pillow < 10.1 (no scalable default font)
+        return ImageFont.load_default()
+
+
+def _wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, width: int, max_lines: int) -> list[str]:
+    lines: list[str] = []
+    for paragraph in str(text).splitlines() or [""]:
+        line = ""
+        for word in paragraph.split():
+            candidate = f"{line} {word}".strip()
+            if draw.textlength(candidate, font=font) <= width or not line:
+                line = candidate
+            else:
+                lines.append(line)
+                line = word
+        lines.append(line)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        last = lines[-1]
+        while last and draw.textlength(last + " …", font=font) > width:
+            last = last[:-1]
+        lines[-1] = last.rstrip(" ,") + " …"
+    return lines
+
+
+def compose_details(
+    map_png: bytes,
+    title: str,
+    subtitle: str,
+    rows: Sequence[tuple[str, str]],
+    max_lines: int = 4,
+) -> bytes:
+    """Append a white panel with the outage details under a rendered map."""
+    base = Image.open(BytesIO(map_png)).convert("RGB")
+    width = base.width
+    title_font, sub_font, label_font, value_font = _font(22), _font(16), _font(15), _font(16)
+    scratch = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    value_w = width - 2 * _PAD - _LABEL_W
+    line_h = 22
+
+    wrapped = [(label, _wrap(scratch, value or "Unknown", value_font, value_w, max_lines)) for label, value in rows]
+    height = _PAD + 30 + 26 + 14 + sum(len(v) * line_h + 10 for _, v in wrapped) + _PAD
+
+    image = Image.new("RGB", (width, base.height + height), _PANEL_BG)
+    image.paste(base, (0, 0))
+    draw = ImageDraw.Draw(image)
+    y = base.height + _PAD
+    draw.text((_PAD, y), title, font=title_font, fill=_TEXT)
+    y += 30
+    draw.text((_PAD, y), subtitle, font=sub_font, fill=_MUTED)
+    y += 26
+    draw.line([(_PAD, y), (width - _PAD, y)], fill=_RULE, width=1)
+    y += 14
+    for label, lines in wrapped:
+        draw.text((_PAD, y + 1), label, font=label_font, fill=_MUTED)
+        for i, line in enumerate(lines):
+            draw.text((_PAD + _LABEL_W, y + i * line_h), line, font=value_font, fill=_TEXT)
+        y += len(lines) * line_h + 10
+
+    out = BytesIO()
+    image.save(out, format="PNG", optimize=True)
+    return out.getvalue()

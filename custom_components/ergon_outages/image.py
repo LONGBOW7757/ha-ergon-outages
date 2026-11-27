@@ -43,6 +43,7 @@ class _ErgonMapImage(ErgonOutagesEntity, ImageEntity):
 
     _attr_content_type = "image/png"
     _focus: str | None = None
+    _details = False
 
     def __init__(self, coordinator: ErgonOutagesCoordinator, key: str) -> None:
         ErgonOutagesEntity.__init__(self, coordinator, key)
@@ -62,7 +63,7 @@ class _ErgonMapImage(ErgonOutagesEntity, ImageEntity):
         super()._handle_coordinator_update()
 
     async def async_image(self) -> bytes | None:
-        return await self.coordinator.map_renderer.async_render(self._focus)
+        return await self.coordinator.map_renderer.async_render(self._focus, details=self._details)
 
 
 class ErgonOutageMapImage(_ErgonMapImage):
@@ -79,6 +80,9 @@ class ErgonOutageDetailImage(_ErgonMapImage):
 
     _attr_translation_key = "outage_detail_map"
     _unrecorded_attributes = frozenset({"streets", "suburbs"})
+    # The picture includes a panel with every detail, because the app's pop-up
+    # for a picture shows only the picture.
+    _details = True
 
     def __init__(self, coordinator: ErgonOutagesCoordinator, event_id: str) -> None:
         self._focus = event_id

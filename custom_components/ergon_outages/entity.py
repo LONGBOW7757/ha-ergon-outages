@@ -17,14 +17,7 @@ from homeassistant.util import dt as dt_util
 from .const import ATTRIBUTION, DOMAIN
 from .coordinator import ErgonOutagesCoordinator
 from .models import Outage
-
-
-def format_local(value: datetime | None) -> str:
-    """Human readable local time for map tooltips, e.g. 'Sat 15 Nov 4:30 PM'."""
-    if value is None:
-        return "Unknown"
-    local = dt_util.as_local(value)
-    return f"{local:%a} {local.day} {local:%b} {local.hour % 12 or 12}:{local:%M %p}"
+from .renderer import format_local
 
 
 def outages_in_phase(coordinator: ErgonOutagesCoordinator, phase: str) -> list[Outage]:

@@ -38,7 +38,7 @@ Entity IDs below assume the location is named `Home`.
 | `sensor.ergon_outages_home_upcoming_outages` | Number of scheduled outages |
 | `sensor.ergon_outages_home_next_outage_start` | When the next planned outage starts |
 | `sensor.ergon_outages_home_estimated_restoration` | Ergon's estimated restoration time for current outages (the latest, if several) |
-| `image.ergon_outages_home_outage_<event id>_map` | One per outage: a map zoomed to that outage, with every detail as attributes (location, event ID, type, status, reason, customers affected, suburbs, streets, start and estimated restoration). Its pop-up is what an alert opens when tapped. Created and removed with the outage. |
+| `image.ergon_outages_home_outage_<event id>_map` | One per outage: a map zoomed to that outage with a panel underneath listing every detail (also available as attributes (location, event ID, type, status, reason, customers affected, suburbs, streets, start and estimated restoration). Its pop-up is what an alert opens when tapped. Created and removed with the outage. |
 | `sensor.ergon_outages_home_outage_<event id>` | One per outage: **Current** or **Upcoming**, with reason, status, customers affected, suburbs, streets, start, estimated restoration, map position and polygon. It is created when the outage appears and removed when it clears. |
 
 "Current" means the outage's start time has passed or isn't set; "Upcoming" means it starts in the future. Ergon rarely gives a restoration time for new faults, so expect "unknown" early on.
@@ -72,7 +72,7 @@ A ready-made automation is in [examples/notifications.yaml](examples/notificatio
 
 ## Map
 
-**Notifications with a map:** the example automation attaches a map zoomed to the outage to every alert (cleared outages in green, for context). **Tapping the alert** opens that outage's pop-up in the Home Assistant app: the map plus every detail of the outage. Your phone downloads it from Home Assistant when the alert arrives, so this only works if the phone can reach Home Assistant at that moment (on home Wi‑Fi, or anywhere with remote access such as Home Assistant Cloud). Otherwise the alert arrives without the picture.
+**Notifications with a map:** the example automation attaches a map zoomed to the outage to every alert (cleared outages in green, for context). **Tapping the alert** opens that outage's pop-up in the Home Assistant app: a map of the outage with a panel listing the reason, status, start, estimated restoration, customers affected, location, suburbs and streets. Your phone downloads it from Home Assistant when the alert arrives, so this only works if the phone can reach Home Assistant at that moment (on home Wi‑Fi, or anywhere with remote access such as Home Assistant Cloud). Otherwise the alert arrives without the picture.
 
 The map zooms to fit the outage areas found within your radius (or shows the whole search circle when there are none). Map tiles come from OpenStreetMap and are only downloaded when the outages change.
 

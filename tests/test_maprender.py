@@ -73,3 +73,18 @@ def test_points_keep_several_locations_in_view() -> None:
     plan = plan_map(Z(5000) + [(other[0], other[1], 5000)], [outage], [HOME, other])
     assert _inside(plan, HOME[1], HOME[0]) and _inside(plan, other[1], other[0])
     assert all(_inside(plan, lon, lat) for lon, lat in outage["coordinates"][0])
+
+
+def test_details_panel_wraps_and_truncates() -> None:
+    from custom_components.ergon_outages.maprender import compose_details
+
+    plan = plan_map(Z(250))
+    base = compose_map(plan, {t: None for t in plan.tiles()}, Z(250), [])
+    short = compose_details(base, "Outage X", "Planned", [("Reason", "Short")])
+    long = compose_details(base, "Outage X", "Planned", [("Streets", "Long Street Name, " * 60)], max_lines=4)
+    h_base = Image.open(BytesIO(base)).height
+    h_short = Image.open(BytesIO(short)).height
+    h_long = Image.open(BytesIO(long)).height
+    assert h_base == MAP_HEIGHT < h_short < h_long
+    # 60 street names are capped at 4 lines, so the panel stays a sane size.
+    assert h_long - h_short <= 4 * 22

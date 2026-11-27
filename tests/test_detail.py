@@ -141,3 +141,37 @@ async def test_focused_map_differs_from_overview(hass: HomeAssistant, aioclient_
     far = await renderer.async_render("26FAR")
     assert len({overview, near, far}) == 3
     assert await renderer.async_render("26NEAR") is near  # cached
+
+
+async def test_outage_picture_includes_details_panel(
+    hass: HomeAssistant, aioclient_mock, hass_client
+) -> None:
+    from io import BytesIO
+
+    from PIL import Image
+
+    from custom_components.ergon_outages.maprender import MAP_HEIGHT
+
+    now = dt_util.utcnow()
+    _mock(aioclient_mock, collection(feature("26AA1", start=now, status="Outage reported")))
+    entry = _entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    client = await hass_client()
+
+    async def height(entity_id: str) -> int:
+        resp = await client.get(f"/api/image_proxy/{entity_id}")
+        assert resp.status == 200
+        return Image.open(BytesIO(await resp.read())).height
+
+    detail = "image.ergon_outages_home_outage_26aa1_map"
+    assert await height("image.ergon_outages_home_outage_map") == MAP_HEIGHT  # overview: map only
+    assert await height(detail) > MAP_HEIGHT + 200  # map + details panel
+
+    # A status change (same shape) refreshes the picture.
+    before = hass.states.get(detail).state
+    _mock(aioclient_mock, collection(feature("26AA1", start=now, status="Crews on route")))
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(detail).state != before
