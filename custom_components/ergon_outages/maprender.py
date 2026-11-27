@@ -29,7 +29,11 @@ _SCALE = 2  # overlay supersampling for smooth edges
 RGB = tuple[int, int, int]
 COLOR_CURRENT: RGB = (229, 57, 53)
 COLOR_FUTURE: RGB = (251, 140, 0)
+COLOR_CLEARED: RGB = (67, 160, 71)
 COLOR_HOME: RGB = (25, 118, 210)
+
+# A monitored location: (latitude, longitude, radius in metres).
+Zone = tuple[float, float, float]
 _BACKGROUND: RGB = (229, 227, 223)
 
 
@@ -90,34 +94,41 @@ def iter_rings(geometries: Iterable[Mapping[str, Any]]) -> Iterable[Sequence[Seq
                 yield polygon[0]
 
 
+def _circle_corners(zone: Zone) -> list[tuple[float, float]]:
+    lat, lon, radius = zone
+    r = max(radius, 100.0)
+    dlat = r / 111_320
+    dlon = r / (111_320 * max(math.cos(math.radians(lat)), 0.01))
+    return [(lon - dlon, lat - dlat), (lon + dlon, lat + dlat)]
+
+
 def plan_map(
-    home: tuple[float, float],
-    radius_m: float,
-    geometries: Iterable[Mapping[str, Any]],
+    zones: Sequence[Zone],
+    geometries: Iterable[Mapping[str, Any]] = (),
+    points: Iterable[tuple[float, float]] = (),
     width: int = MAP_WIDTH,
     height: int = MAP_HEIGHT,
 ) -> MapPlan:
-    """Pick the closest zoom that frames the outages.
+    """Pick the closest zoom that frames what matters.
 
-    With outages, the view fits just their polygons (the search circle may be
-    much larger and would leave them tiny). With none, it shows the circle.
+    With outage polygons, the view fits them (plus any extra `points`, given as
+    (lat, lon), e.g. the monitored locations when an alert covers several).
+    Without polygons it shows the monitored circles.
     """
-    points = [(pt[0], pt[1]) for ring in iter_rings(geometries) for pt in ring]
-    if not points:
-        lat, lon = home
-        r = max(radius_m, 100.0)
-        dlat = r / 111_320
-        dlon = r / (111_320 * max(math.cos(math.radians(lat)), 0.01))
-        points = [(lon - dlon, lat - dlat), (lon + dlon, lat + dlat)]
+    frame = [(pt[0], pt[1]) for ring in iter_rings(geometries) for pt in ring]
+    if frame:
+        frame.extend((lon, lat) for lat, lon in points)
+    else:
+        frame = [corner for zone in zones for corner in _circle_corners(zone)]
 
     zoom = _MIN_ZOOM
     for z in range(_MAX_ZOOM, _MIN_ZOOM - 1, -1):
-        xs, ys = zip(*(lonlat_to_world_px(x, y, z) for x, y in points))
+        xs, ys = zip(*(lonlat_to_world_px(x, y, z) for x, y in frame))
         if max(xs) - min(xs) <= width - 2 * _PADDING and max(ys) - min(ys) <= height - 2 * _PADDING:
             zoom = z
             break
 
-    xs, ys = zip(*(lonlat_to_world_px(x, y, zoom) for x, y in points))
+    xs, ys = zip(*(lonlat_to_world_px(x, y, zoom) for x, y in frame))
     cx, cy = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2
     return MapPlan(zoom=zoom, left=cx - width / 2, top=cy - height / 2, width=width, height=height)
 
@@ -125,11 +136,10 @@ def plan_map(
 def compose_map(
     plan: MapPlan,
     tiles: Mapping[tuple[int, int], bytes | None],
-    home: tuple[float, float],
-    radius_m: float,
+    zones: Sequence[Zone],
     layers: Sequence[tuple[RGB, Iterable[Mapping[str, Any]]]],
 ) -> bytes:
-    """Draw tiles, outage polygons, the search circle and home marker as PNG."""
+    """Draw tiles, outage polygons, search circles and location markers as PNG."""
     image = Image.new("RGBA", (plan.width, plan.height), _BACKGROUND + (255,))
     for (tx, ty), data in tiles.items():
         if not data:
@@ -148,12 +158,13 @@ def compose_map(
         x, y = plan.to_image(lon, lat)
         return x * s, y * s
 
-    # Search circle
-    hx, hy = px(home[1], home[0])
-    if radius_m > 0:
-        rpx = radius_m / metres_per_pixel(home[0], plan.zoom) * s
-        draw.ellipse([hx - rpx, hy - rpx, hx + rpx, hy + rpx],
-                     fill=COLOR_HOME + (28,), outline=COLOR_HOME + (200,), width=2 * s)
+    # Search circles
+    for lat, lon, radius in zones:
+        if radius > 0:
+            hx, hy = px(lon, lat)
+            rpx = radius / metres_per_pixel(lat, plan.zoom) * s
+            draw.ellipse([hx - rpx, hy - rpx, hx + rpx, hy + rpx],
+                         fill=COLOR_HOME + (28,), outline=COLOR_HOME + (200,), width=2 * s)
 
     # Outage polygons (upcoming first so current ones sit on top)
     for color, geometries in layers:
@@ -162,9 +173,11 @@ def compose_map(
             draw.polygon(points, fill=color + (100,))
             draw.line(points + [points[0]], fill=color + (255,), width=3 * s, joint="curve")
 
-    # Home marker
-    draw.ellipse([hx - 9 * s, hy - 9 * s, hx + 9 * s, hy + 9 * s], fill=(255, 255, 255, 255))
-    draw.ellipse([hx - 6 * s, hy - 6 * s, hx + 6 * s, hy + 6 * s], fill=COLOR_HOME + (255,))
+    # Location markers
+    for lat, lon, _ in zones:
+        hx, hy = px(lon, lat)
+        draw.ellipse([hx - 9 * s, hy - 9 * s, hx + 9 * s, hy + 9 * s], fill=(255, 255, 255, 255))
+        draw.ellipse([hx - 6 * s, hy - 6 * s, hx + 6 * s, hy + 6 * s], fill=COLOR_HOME + (255,))
 
     overlay = overlay.resize((plan.width, plan.height), Image.LANCZOS)
     image = Image.alpha_composite(image, overlay)

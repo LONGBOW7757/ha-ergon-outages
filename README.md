@@ -53,7 +53,14 @@ The integration fires these events. Each happens **once per outage change**, and
 | `ergon_outages_outage_updated` | Status, start, restoration time or customer count changed |
 | `ergon_outages_outage_cleared` | The outage is no longer listed |
 
-Event data: `event_id`, `phase`, `outage_type` (`planned`/`unplanned`), `status`, `reason`, `customers_affected`, `suburbs`, `start`, `estimated_restoration` (ISO times or `null`), `location`, `config_entry_id`, `map_entity_id`, `map_url` (a picture of the map zoomed to this outage; the link works without a login for 7 days, so it's safe to attach to phone notifications) and `detail_entity_id` (the outage's own map entity, used as the tap target). `map_url` and `detail_entity_id` are empty for cleared events.
+Event data: `event_id`, `phase`, `outage_type` (`planned`/`unplanned`), `status`, `reason`, `customers_affected`, `suburbs`, `start`, `estimated_restoration` (ISO times or `null`), plus:
+
+- `location` – the affected location(s), e.g. `Morven` or `Morven + Augathella`; `locations` – the same as a list
+- `config_entry_id` / `config_entry_ids`, `map_entity_id`
+- `map_url` – a picture of the map zoomed to this outage (cleared outages are drawn in green where they were). The link works without a login for 7 days, so it's safe to attach to phone notifications.
+- `detail_entity_id` / `detail_entity_ids` – the outage's own map entity for each location, used as the tap target (empty for cleared outages)
+
+**Several locations, one alert:** when an outage overlaps more than one monitored location, you get a single alert naming them all (`Morven + Augathella`) with a map showing each location's area. Whenever one location spots a change, the others are re-checked straight away so their reports can be combined.
 
 Outages that already exist when you first add the integration are recorded quietly (no burst of alerts on day one). They still show up in the entities.
 
@@ -61,7 +68,7 @@ A ready-made automation is in [examples/notifications.yaml](examples/notificatio
 
 ## Map
 
-**Notifications with a map:** the example automation attaches a map zoomed to the outage to every alert except "cleared". **Tapping the alert** opens that outage's pop-up in the Home Assistant app: the map plus every detail of the outage. Your phone downloads it from Home Assistant when the alert arrives, so this only works if the phone can reach Home Assistant at that moment (on home Wi‑Fi, or anywhere with remote access such as Home Assistant Cloud). Otherwise the alert arrives without the picture.
+**Notifications with a map:** the example automation attaches a map zoomed to the outage to every alert (cleared outages in green, for context). **Tapping the alert** opens that outage's pop-up in the Home Assistant app: the map plus every detail of the outage. Your phone downloads it from Home Assistant when the alert arrives, so this only works if the phone can reach Home Assistant at that moment (on home Wi‑Fi, or anywhere with remote access such as Home Assistant Cloud). Otherwise the alert arrives without the picture.
 
 The map zooms to fit the outage areas found within your radius (or shows the whole search circle when there are none). Map tiles come from OpenStreetMap and are only downloaded when the outages change.
 

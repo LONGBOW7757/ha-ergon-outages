@@ -18,12 +18,12 @@ import secrets
 from aiohttp import web
 
 from homeassistant.components.http import HomeAssistantView
-from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.http import KEY_HASS
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .renderer import MapSpec, async_render_spec
 
 LINK_TTL = timedelta(days=7)
 MAX_LINKS = 30  # snapshots are ~150-300 kB each
@@ -33,9 +33,8 @@ _DATA_LINKS = f"{DOMAIN}_map_links"
 
 @dataclass
 class MapLink:
-    entry_id: str
+    spec: MapSpec
     created: datetime
-    focus: str | None = None
     png: bytes | None = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -54,10 +53,11 @@ def _links(hass: HomeAssistant) -> OrderedDict[str, MapLink]:
 
 
 @callback
-def async_create_map_link(hass: HomeAssistant, entry_id: str, focus: str | None = None) -> str:
-    """Return a new relative URL serving a snapshot of the entry's map.
+def async_create_map_link(hass: HomeAssistant, spec: MapSpec) -> str:
+    """Return a new relative URL serving the map described by `spec`.
 
-    With `focus` (an EVENT_ID) the map is zoomed to that outage.
+    The spec carries its own geometry, so the link still works after the
+    outage has cleared or the location has been reconfigured.
     """
     links = _links(hass)
     cutoff = dt_util.utcnow() - LINK_TTL
@@ -66,7 +66,7 @@ def async_create_map_link(hass: HomeAssistant, entry_id: str, focus: str | None 
     while len(links) >= MAX_LINKS:
         links.popitem(last=False)
     token = secrets.token_urlsafe(24)
-    links[token] = MapLink(entry_id=entry_id, created=dt_util.utcnow(), focus=focus)
+    links[token] = MapLink(spec=spec, created=dt_util.utcnow())
     return URL_PATH.format(token=token)
 
 
@@ -85,12 +85,9 @@ class ErgonMapLinkView(HomeAssistantView):
 
         async with link.lock:
             if link.png is None:
-                # First download renders the map as it is now; later downloads
-                # (e.g. iOS re-fetching on expand) get the same snapshot.
-                entry = hass.config_entries.async_get_entry(link.entry_id)
-                if entry is None or entry.state is not ConfigEntryState.LOADED:
-                    raise web.HTTPNotFound
-                link.png = await entry.runtime_data.map_renderer.async_render(link.focus)
+                # Rendered on first download; later downloads (e.g. iOS
+                # re-fetching on expand) get the same picture.
+                link.png = await async_render_spec(hass, link.spec)
 
         return web.Response(
             body=link.png,

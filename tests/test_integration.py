@@ -281,7 +281,7 @@ async def test_outage_map_image(hass: HomeAssistant, aioclient_mock, hass_client
     entry = _entry()
     entry.add_to_hass(hass)
     with patch(
-        "custom_components.ergon_outages.renderer.MapRenderer._async_fetch_tile",
+        "custom_components.ergon_outages.renderer._async_fetch_tile",
         return_value=None,
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
@@ -347,7 +347,7 @@ async def test_notification_gets_map_on_startup(
     now = dt_util.utcnow()
     _mock(aioclient_mock, collection(feature("26PL9", start=now + timedelta(days=5), customers=2)))
     with patch(
-        "custom_components.ergon_outages.renderer.MapRenderer._async_fetch_tile",
+        "custom_components.ergon_outages.renderer._async_fetch_tile",
         return_value=None,
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)

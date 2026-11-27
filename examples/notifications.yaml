@@ -4,7 +4,9 @@
 #
 # The integration fires one event per outage change, and remembers what it has
 # already announced (across restarts), so you only ever get one alert per event.
-# One automation covers every location you've added to the integration.
+# One automation covers every location you've added to the integration. An
+# outage overlapping several locations sends ONE alert; o.location reads
+# "Morven + Augathella" and o.locations lists them.
 alias: Ergon outage alerts
 description: Phone alerts for new, starting and cleared Ergon outages
 mode: queued

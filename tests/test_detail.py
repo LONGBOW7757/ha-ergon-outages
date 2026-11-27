@@ -26,7 +26,7 @@ from .test_integration import _entry, _mock
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "notifications.yaml"
 NO_TILES = patch(
-    "custom_components.ergon_outages.renderer.MapRenderer._async_fetch_tile",
+    "custom_components.ergon_outages.renderer._async_fetch_tile",
     return_value=None,
 )
 
@@ -106,7 +106,7 @@ async def test_alert_taps_through_to_outage(hass: HomeAssistant, aioclient_mock)
     assert data["image"].startswith("/api/ergon_outages/map/")
 
 
-async def test_cleared_alert_has_no_tap_target(hass: HomeAssistant, aioclient_mock) -> None:
+async def test_cleared_alert_has_map_but_no_tap_target(hass: HomeAssistant, aioclient_mock) -> None:
     calls = async_mock_service(hass, "notify", "notify")
     assert await async_setup_component(
         hass, automation.DOMAIN, {automation.DOMAIN: [yaml.safe_load(EXAMPLE.read_text())]}
@@ -121,7 +121,9 @@ async def test_cleared_alert_has_no_tap_target(hass: HomeAssistant, aioclient_mo
     await entry.runtime_data.async_refresh()
     await _settle(hass)
     assert calls[-1].data["title"].startswith("✅")
-    assert calls[-1].data["data"] == {}
+    # The outage's entity is gone, so there's nothing to open, but the alert
+    # still shows where it was (drawn in green).
+    assert set(calls[-1].data["data"]) == {"image"}
 
 
 async def test_focused_map_differs_from_overview(hass: HomeAssistant, aioclient_mock) -> None:

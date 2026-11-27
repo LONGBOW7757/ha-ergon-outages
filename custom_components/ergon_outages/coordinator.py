@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 import logging
 from typing import Any
@@ -21,34 +22,15 @@ from .const import (
     DEFAULT_RADIUS_M,
     DEFAULT_SCAN_INTERVAL_MIN,
     DOMAIN,
-    EVENT_NEW_OUTAGE,
-    EVENT_OUTAGE_CLEARED,
-    EVENT_OUTAGE_STARTED,
-    EVENT_OUTAGE_UPDATED,
     OUTAGE_MAP_KEY_PREFIX,
     STORAGE_VERSION,
     storage_key,
 )
-from .models import (
-    KIND_CLEARED,
-    KIND_NEW,
-    KIND_STARTED,
-    KIND_UPDATED,
-    Outage,
-    diff_outages,
-    parse_features,
-)
-from .maplinks import async_create_map_link
+from .maprender import Zone
+from .models import KIND_CLEARED, Outage, diff_outages, parse_features
 from .renderer import MapRenderer
 
 _LOGGER = logging.getLogger(__name__)
-
-_EVENT_TYPES = {
-    KIND_NEW: EVENT_NEW_OUTAGE,
-    KIND_STARTED: EVENT_OUTAGE_STARTED,
-    KIND_UPDATED: EVENT_OUTAGE_UPDATED,
-    KIND_CLEARED: EVENT_OUTAGE_CLEARED,
-}
 
 type ErgonConfigEntry = ConfigEntry[ErgonOutagesCoordinator]
 
@@ -59,7 +41,7 @@ def entry_settings(entry: ConfigEntry) -> dict[str, Any]:
 
 
 class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
-    """Fetches outages for one location and announces changes on the event bus."""
+    """Fetches outages for one location and reports changes to the alert hub."""
 
     config_entry: ErgonConfigEntry
 
@@ -77,6 +59,7 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
         self.latitude: float = settings[CONF_LATITUDE]
         self.longitude: float = settings[CONF_LONGITUDE]
         self.radius_m: float = float(settings.get(CONF_RADIUS, DEFAULT_RADIUS_M))
+        self.map_renderer = MapRenderer(hass, self)
         self._session = async_get_clientsession(hass)
         self._store: Store[dict[str, Any]] = Store(
             hass, STORAGE_VERSION, storage_key(entry.entry_id)
@@ -85,17 +68,41 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
         # followed by a good one) never re-announces them. None until loaded;
         # stays None on the very first run so existing outages form a baseline.
         self._known: dict[str, dict[str, Any]] | None = None
+        # Last known shape of each announced outage, so a "cleared" alert can
+        # still show where it was. Persisted with the snapshot.
+        self._known_geometries: dict[str, list[dict[str, Any]]] = {}
         self._entities_ready = False
-        self.map_renderer = MapRenderer(hass, self)
-        self._pending_events: list[tuple[str, dict[str, Any]]] = []
+        self._pending: list[tuple[str, dict[str, Any], list[dict[str, Any]]]] = []
+        # Serialises polls: the alert hub can ask for an extra check while a
+        # scheduled one is running.
+        self._poll_lock = asyncio.Lock()
+
+    @property
+    def zone(self) -> Zone:
+        return (self.latitude, self.longitude, self.radius_m)
+
+    @property
+    def entities_ready(self) -> bool:
+        return self._entities_ready
+
+    @property
+    def map_entity_id(self) -> str | None:
+        return er.async_get(self.hass).async_get_entity_id(
+            "image", DOMAIN, f"{self.config_entry.entry_id}_outage_map"
+        )
 
     async def _async_setup(self) -> None:
         """Load the saved snapshot before the first refresh."""
         stored = await self._store.async_load()
         if stored is not None:
             self._known = stored.get("outages", {})
+            self._known_geometries = stored.get("geometries", {})
 
     async def _async_update_data(self) -> dict[str, Outage]:
+        async with self._poll_lock:
+            return await self._async_poll()
+
+    async def _async_poll(self) -> dict[str, Outage]:
         try:
             features = await async_query_outages(
                 self._session, self.latitude, self.longitude, self.radius_m
@@ -106,64 +113,56 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
 
         outages = parse_features(features, dt_util.utcnow())
         events, snapshot = diff_outages(self._known or {}, outages)
+        geometries = {eid: o.geometries for eid, o in outages.items()}
 
         if self._known is None:
             _LOGGER.debug(
-                "First run for %s: recording %d existing outage(s) without events",
+                "First run for %s: recording %d existing outage(s) without alerts",
                 self.config_entry.title,
                 len(outages),
             )
         else:
-            self._pending_events.extend(events)
+            for kind, summary in events:
+                eid = summary["event_id"]
+                shape = (
+                    self._known_geometries.get(eid, [])
+                    if kind == KIND_CLEARED
+                    else outages[eid].geometries
+                )
+                self._pending.append((kind, summary, shape))
 
-        if snapshot != self._known:
+        if snapshot != self._known or geometries != self._known_geometries:
             self._known = snapshot
-            await self._store.async_save({"outages": snapshot})
+            self._known_geometries = geometries
+            await self._store.async_save({"outages": snapshot, "geometries": geometries})
 
         if self._entities_ready:
-            # Deferred so listeners see the coordinator's new data first.
-            self.hass.loop.call_soon(self._async_fire_pending_events)
+            self._async_submit_pending()
         return outages
 
     @callback
     def async_entities_ready(self) -> None:
-        """Called once all platforms are set up; releases held-back events.
+        """Called once all platforms are set up; releases held-back alerts.
 
-        Events found by the first poll after a start or reload are held until
-        the entities (notably the map image) exist, so automations can use them.
+        Changes found by the first poll after a start or reload are held until
+        the entities (notably the map images) exist, so alerts can link to them.
         """
         self._entities_ready = True
-        self._async_fire_pending_events()
+        self._async_submit_pending()
 
     @callback
-    def _async_fire_pending_events(self) -> None:
-        if not self._pending_events:
+    def _async_submit_pending(self) -> None:
+        if not self._pending:
             return
-        entry_id = self.config_entry.entry_id
-        ent_reg = er.async_get(self.hass)
-        # Lets automations attach the map without hard-coding an entity ID.
-        map_entity_id = ent_reg.async_get_entity_id("image", DOMAIN, f"{entry_id}_outage_map")
-        events, self._pending_events = self._pending_events, []
-        for kind, summary in events:
-            active = kind != KIND_CLEARED
-            event_id = summary["event_id"]
-            self.hass.bus.async_fire(
-                _EVENT_TYPES[kind],
-                {
-                    "config_entry_id": entry_id,
-                    "location": self.config_entry.title,
-                    "map_entity_id": map_entity_id,
-                    # Snapshot zoomed to this outage, for the notification image.
-                    "map_url": async_create_map_link(self.hass, entry_id, event_id) if active else None,
-                    # The outage's own map entity; its pop-up shows the map and
-                    # every detail. Used as the notification's tap target.
-                    "detail_entity_id": self._detail_entity_id(event_id) if active else None,
-                    **summary,
-                },
-            )
+        from .alerts import async_get_alert_hub  # noqa: PLC0415 - avoids an import cycle
+
+        hub = async_get_alert_hub(self.hass)
+        pending, self._pending = self._pending, []
+        for kind, summary, shape in pending:
+            hub.async_submit(self, kind, summary, shape)
 
     @callback
-    def _detail_entity_id(self, event_id: str) -> str | None:
+    def async_detail_entity_id(self, event_id: str) -> str | None:
         """Entity ID of the outage's map image, registering it if needed.
 
         The image platform adds the entity moments later; registering it now
@@ -173,6 +172,8 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
         unique_id = f"{self.config_entry.entry_id}_{OUTAGE_MAP_KEY_PREFIX}{event_id}"
         if entity_id := ent_reg.async_get_entity_id("image", DOMAIN, unique_id):
             return entity_id
+        if event_id not in (self.data or {}):
+            return None
         device = dr.async_get(self.hass).async_get_device(
             identifiers={(DOMAIN, self.config_entry.entry_id)}
         )
