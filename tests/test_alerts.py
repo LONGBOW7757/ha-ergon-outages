@@ -86,12 +86,13 @@ async def test_overlapping_outage_sends_one_alert(hass: HomeAssistant, ergon, ha
 
     assert len(new) == 1
     data = new[0].data
-    assert data["location"] == "Morven + Augathella"
-    assert data["locations"] == ["Morven", "Augathella"]
+    # Alphabetical, whichever location noticed first.
+    assert data["location"] == "Augathella + Morven"
+    assert data["locations"] == ["Augathella", "Morven"]
     assert len(data["config_entry_ids"]) == 2
     assert data["detail_entity_ids"] == [
-        "image.ergon_outages_morven_outage_26big_map",
         "image.ergon_outages_augathella_outage_26big_map",
+        "image.ergon_outages_morven_outage_26big_map",
     ]
     assert data["detail_entity_id"] == data["detail_entity_ids"][0]
     client = await hass_client_no_auth()
@@ -103,6 +104,16 @@ async def test_overlapping_outage_sends_one_alert(hass: HomeAssistant, ergon, ha
         await entry.runtime_data.async_refresh()
     await _settle(hass)
     assert len(new) == 1
+
+
+async def test_order_does_not_depend_on_who_noticed_first(hass: HomeAssistant, ergon) -> None:
+    await _add(hass, "Morven", MORVEN)
+    augathella = await _add(hass, "Augathella", AUGATHELLA)
+    new = async_capture_events(hass, EVENT_NEW_OUTAGE)
+    ergon.add([MORVEN, AUGATHELLA], feature("26BIG", start=None, lon=146.85, lat=-26.1))
+    await augathella.runtime_data.async_refresh()  # Augathella notices first this time
+    await _settle(hass)
+    assert new[0].data["location"] == "Augathella + Morven"
 
 
 async def test_separate_outages_stay_separate(hass: HomeAssistant, ergon) -> None:

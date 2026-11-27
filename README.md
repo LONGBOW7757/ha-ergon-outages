@@ -55,12 +55,12 @@ The integration fires these events. Each happens **once per outage change**, and
 
 Event data: `event_id`, `phase`, `outage_type` (`planned`/`unplanned`), `status`, `reason`, `customers_affected`, `suburbs`, `start`, `estimated_restoration` (ISO times or `null`), plus:
 
-- `location` – the affected location(s), e.g. `Morven` or `Morven + Augathella`; `locations` – the same as a list
+- `location` – the affected location(s), e.g. `Morven` or `Augathella + Morven` (always alphabetical); `locations` – the same as a list
 - `config_entry_id` / `config_entry_ids`, `map_entity_id`
 - `map_url` – a picture of the map zoomed to this outage (cleared outages are drawn in green where they were). The link works without a login for 7 days, so it's safe to attach to phone notifications.
 - `detail_entity_id` / `detail_entity_ids` – the outage's own map entity for each location, used as the tap target (empty for cleared outages)
 
-**Several locations, one alert:** when an outage overlaps more than one monitored location, you get a single alert naming them all (`Morven + Augathella`) with a map showing each location's area. Whenever one location spots a change, the others are re-checked straight away so their reports can be combined.
+**Several locations, one alert:** when an outage overlaps more than one monitored location, you get a single alert naming them all in alphabetical order (`Augathella + Morven`) with a map showing each location's area. Whenever one location spots a change, the others are re-checked straight away so their reports can be combined.
 
 Outages that already exist when you first add the integration are recorded quietly (no burst of alerts on day one). They still show up in the entities.
 

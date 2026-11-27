@@ -113,7 +113,8 @@ class AlertHub:
 
     @callback
     def _async_fire(self, alert: _PendingAlert) -> None:
-        reports = list(alert.reports.values())
+        # Alphabetical, so the same towns always read the same way.
+        reports = sorted(alert.reports.values(), key=lambda r: r.coordinator.config_entry.title.casefold())
         coordinators = [r.coordinator for r in reports]
         titles = [c.config_entry.title for c in coordinators]
         active = alert.kind != KIND_CLEARED
