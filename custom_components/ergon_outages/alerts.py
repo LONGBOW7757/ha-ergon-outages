@@ -1,9 +1,9 @@
 """Combine the same outage seen by several locations into one alert.
 
-Each location polls on its own schedule, so Morven and Augathella would spot
+Each location polls on its own schedule, so Mitchell and Roma would spot
 the same new outage minutes apart. When any location reports a change, the hub
 immediately re-checks the other locations, then fires ONE event per
-(kind, EVENT_ID) naming every location it affects, e.g. "Morven + Augathella".
+(kind, EVENT_ID) naming every location it affects, e.g. "Mitchell + Roma".
 """
 
 from __future__ import annotations

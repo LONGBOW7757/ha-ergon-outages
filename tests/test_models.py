@@ -42,7 +42,7 @@ def test_parse_phases_and_fields() -> None:
     assert outages["C"].phase == PHASE_CURRENT  # no start time => happening now
     a = outages["A"]
     assert a.estimated_restoration == NOW + timedelta(hours=2)
-    assert a.suburbs == "Charleville"
+    assert a.suburbs == "Longreach"
     assert a.streets == "Alfred St, Wills St"
     assert a.reason == "Replace power poles and improve the electricity network"
     lat, lon = a.centroid

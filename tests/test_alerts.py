@@ -24,8 +24,8 @@ from custom_components.ergon_outages.const import (
 
 from .conftest import feature
 
-MORVEN = (-26.42, 147.11)
-AUGATHELLA = (-25.80, 146.58)
+MITCHELL = (-26.42, 147.11)
+ROMA = (-25.80, 146.58)
 
 
 class FakeErgon:
@@ -73,26 +73,26 @@ async def _settle(hass: HomeAssistant) -> None:
 
 
 async def test_overlapping_outage_sends_one_alert(hass: HomeAssistant, ergon, hass_client_no_auth) -> None:
-    morven = await _add(hass, "Morven", MORVEN)
-    await _add(hass, "Augathella", AUGATHELLA)
+    mitchell = await _add(hass, "Mitchell", MITCHELL)
+    await _add(hass, "Roma", ROMA)
     new = async_capture_events(hass, EVENT_NEW_OUTAGE)
 
     # A big outage between the towns shows up for both locations, but only
-    # Morven's scheduled poll runs.
-    ergon.add([MORVEN, AUGATHELLA], feature("26BIG", start=None, outage_type="UNPLANNED",
+    # Mitchell's scheduled poll runs.
+    ergon.add([MITCHELL, ROMA], feature("26BIG", start=None, outage_type="UNPLANNED",
                                              lon=146.85, lat=-26.1))
-    await morven.runtime_data.async_refresh()
+    await mitchell.runtime_data.async_refresh()
     await _settle(hass)
 
     assert len(new) == 1
     data = new[0].data
     # Alphabetical, whichever location noticed first.
-    assert data["location"] == "Augathella + Morven"
-    assert data["locations"] == ["Augathella", "Morven"]
+    assert data["location"] == "Mitchell + Roma"
+    assert data["locations"] == ["Mitchell", "Roma"]
     assert len(data["config_entry_ids"]) == 2
     assert data["detail_entity_ids"] == [
-        "image.ergon_outages_augathella_outage_26big_map",
-        "image.ergon_outages_morven_outage_26big_map",
+        "image.ergon_outages_mitchell_outage_26big_map",
+        "image.ergon_outages_roma_outage_26big_map",
     ]
     assert data["detail_entity_id"] == data["detail_entity_ids"][0]
     client = await hass_client_no_auth()
@@ -107,37 +107,37 @@ async def test_overlapping_outage_sends_one_alert(hass: HomeAssistant, ergon, ha
 
 
 async def test_order_does_not_depend_on_who_noticed_first(hass: HomeAssistant, ergon) -> None:
-    await _add(hass, "Morven", MORVEN)
-    augathella = await _add(hass, "Augathella", AUGATHELLA)
+    await _add(hass, "Mitchell", MITCHELL)
+    roma = await _add(hass, "Roma", ROMA)
     new = async_capture_events(hass, EVENT_NEW_OUTAGE)
-    ergon.add([MORVEN, AUGATHELLA], feature("26BIG", start=None, lon=146.85, lat=-26.1))
-    await augathella.runtime_data.async_refresh()  # Augathella notices first this time
+    ergon.add([MITCHELL, ROMA], feature("26BIG", start=None, lon=146.85, lat=-26.1))
+    await roma.runtime_data.async_refresh()  # Roma notices first this time (listed second)
     await _settle(hass)
-    assert new[0].data["location"] == "Augathella + Morven"
+    assert new[0].data["location"] == "Mitchell + Roma"
 
 
 async def test_separate_outages_stay_separate(hass: HomeAssistant, ergon) -> None:
-    morven = await _add(hass, "Morven", MORVEN)
-    await _add(hass, "Augathella", AUGATHELLA)
+    mitchell = await _add(hass, "Mitchell", MITCHELL)
+    await _add(hass, "Roma", ROMA)
     new = async_capture_events(hass, EVENT_NEW_OUTAGE)
-    ergon.add([MORVEN], feature("26MOR", start=None, lon=MORVEN[1], lat=MORVEN[0]))
-    ergon.add([AUGATHELLA], feature("26AUG", start=None, lon=AUGATHELLA[1], lat=AUGATHELLA[0]))
-    await morven.runtime_data.async_refresh()
+    ergon.add([MITCHELL], feature("26MIT", start=None, lon=MITCHELL[1], lat=MITCHELL[0]))
+    ergon.add([ROMA], feature("26ROM", start=None, lon=ROMA[1], lat=ROMA[0]))
+    await mitchell.runtime_data.async_refresh()
     await _settle(hass)
     assert sorted((e.data["event_id"], e.data["location"]) for e in new) == [
-        ("26AUG", "Augathella"),
-        ("26MOR", "Morven"),
+        ("26MIT", "Mitchell"),
+        ("26ROM", "Roma"),
     ]
 
 
 async def test_cleared_alert_shows_where_it_was(hass: HomeAssistant, ergon, hass_client_no_auth) -> None:
-    ergon.add([MORVEN], feature("26GONE", start=dt_util.utcnow() - timedelta(hours=1),
-                                lon=MORVEN[1], lat=MORVEN[0]))
-    morven = await _add(hass, "Morven", MORVEN)  # baseline: no alert
+    ergon.add([MITCHELL], feature("26GONE", start=dt_util.utcnow() - timedelta(hours=1),
+                                lon=MITCHELL[1], lat=MITCHELL[0]))
+    mitchell = await _add(hass, "Mitchell", MITCHELL)  # baseline: no alert
     cleared = async_capture_events(hass, EVENT_OUTAGE_CLEARED)
 
     ergon.outages.clear()
-    await morven.runtime_data.async_refresh()
+    await mitchell.runtime_data.async_refresh()
     await _settle(hass)
 
     assert len(cleared) == 1
@@ -154,13 +154,13 @@ async def test_cleared_alert_shows_where_it_was(hass: HomeAssistant, ergon, hass
 
 async def test_cleared_while_restarting_still_has_a_map(hass: HomeAssistant, ergon) -> None:
     """The outage's shape is saved, so it can be drawn after a restart."""
-    ergon.add([MORVEN], feature("26GONE", start=None, lon=MORVEN[1], lat=MORVEN[0]))
-    morven = await _add(hass, "Morven", MORVEN)
-    await hass.config_entries.async_unload(morven.entry_id)
+    ergon.add([MITCHELL], feature("26GONE", start=None, lon=MITCHELL[1], lat=MITCHELL[0]))
+    mitchell = await _add(hass, "Mitchell", MITCHELL)
+    await hass.config_entries.async_unload(mitchell.entry_id)
     await hass.async_block_till_done()
 
     ergon.outages.clear()
     cleared = async_capture_events(hass, EVENT_OUTAGE_CLEARED)
-    assert await hass.config_entries.async_setup(morven.entry_id)
+    assert await hass.config_entries.async_setup(mitchell.entry_id)
     await _settle(hass)
     assert len(cleared) == 1 and cleared[0].data["map_url"]

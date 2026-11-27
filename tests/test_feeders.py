@@ -162,3 +162,24 @@ async def test_details_panel_lists_feeders_through_the_outage(
         without_lines = await picture_height()
         fetch.assert_not_awaited()
     assert with_lines > without_lines
+
+
+def test_tiny_stubs_are_dropped_and_ends_are_round() -> None:
+    plan = plan_map([(HOME[0], HOME[1], 250)], [SQUARE])
+    tiles = {t: None for t in plan.tiles()}
+    colour = (0, 150, 136)
+    x0, y0 = plan.to_image(146.245, -26.40)
+    stub = {"type": "LineString", "coordinates": [[146.245, -26.40], [146.245 + plan.degrees_per_pixel * 0.5, -26.40]]}
+    blank = compose_map(plan, tiles, [(HOME[0], HOME[1], 0)], [], [])
+    with_stub = compose_map(plan, tiles, [(HOME[0], HOME[1], 0)], [], [(colour, stub)])
+    box = (round(x0) - 10, round(y0) - 10, round(x0) + 10, round(y0) + 10)
+    crop = lambda png: Image.open(BytesIO(png)).convert("RGB").crop(box).tobytes()  # noqa: E731
+    assert crop(blank) == crop(with_stub)  # a half-pixel stub isn't drawn at all
+
+    # Round cap: the corner diagonally beyond a line's end stays background.
+    line = {"type": "LineString", "coordinates": [[146.235, -26.40], [146.245, -26.40]]}
+    png = compose_map(plan, tiles, [(HOME[0], HOME[1], 0)], [], [(colour, line)])
+    image = Image.open(BytesIO(png)).convert("RGB")
+    background = Image.open(BytesIO(blank)).convert("RGB")
+    corner = (round(x0) + 2, round(y0) - 2)
+    assert image.getpixel(corner) == background.getpixel(corner)

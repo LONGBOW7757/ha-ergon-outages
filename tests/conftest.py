@@ -58,7 +58,7 @@ def feature(
             "TYPE": outage_type,
             "STATUS": status,
             "CUSTOMERS_AFFECTED": customers,
-            "SUBURBS": "CHARLEVILLE",
+            "SUBURBS": "LONGREACH",
             "STREETS": "ALFRED ST, WILLS ST",
             "START": ms(start) if start else None,
             "FINISH": None,

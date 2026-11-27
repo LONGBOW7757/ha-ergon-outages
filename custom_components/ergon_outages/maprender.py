@@ -74,6 +74,16 @@ class MapPlan:
         x, y = lonlat_to_world_px(lon, lat, self.zoom)
         return x - self.left, y - self.top
 
+    def doubled(self) -> MapPlan:
+        """The same view at twice the pixel resolution (one zoom level up)."""
+        return MapPlan(
+            zoom=self.zoom + 1,
+            left=self.left * 2,
+            top=self.top * 2,
+            width=self.width * 2,
+            height=self.height * 2,
+        )
+
     def bounds(self) -> tuple[float, float, float, float]:
         """(west, south, east, north) of the viewport in degrees."""
         west, north = world_px_to_lonlat(self.left, self.top, self.zoom)
@@ -268,16 +278,37 @@ def plan_map(
     return MapPlan(zoom=zoom, left=cx - width / 2, top=cy - height / 2, width=width, height=height)
 
 
+def _path_length(points: Sequence[tuple[float, float]]) -> float:
+    return sum(math.hypot(x1 - x0, y1 - y0) for (x0, y0), (x1, y1) in zip(points, points[1:]))
+
+
+def _round_line(draw: ImageDraw.ImageDraw, points: Sequence[tuple[float, float]], fill, width: int) -> None:
+    """A polyline with round joins and round end caps."""
+    draw.line(points, fill=fill, width=width, joint="curve")
+    r = width / 2
+    for x, y in (points[0], points[-1]):
+        draw.ellipse([x - r, y - r, x + r, y + r], fill=fill)
+
+
 def compose_map(
     plan: MapPlan,
     tiles: Mapping[tuple[int, int], bytes | None],
     zones: Sequence[Zone],
     layers: Sequence[tuple[RGB, Iterable[Mapping[str, Any]]]],
     lines: Sequence[tuple[RGB, Mapping[str, Any]]] = (),
+    *,
+    tile_px: int = TILE_SIZE,
+    scale: int = 1,
 ) -> bytes:
     """Draw tiles, outage polygons, feeder lines, search circles and location
-    markers as PNG. Feeder lines are thin and nearly opaque, on top of the
-    outage shading so you can see which lines run through an outage."""
+    markers as PNG.
+
+    `plan` is in output pixels. Each tile (tx, ty) covers `tile_px` output
+    pixels and is resized to that if needed, so standard tiles can be enlarged
+    or high-resolution tiles used. `scale` multiplies every line width, marker
+    and text size (2 = high-resolution output).
+    """
+    k = scale
     image = Image.new("RGBA", (plan.width, plan.height), _BACKGROUND + (255,))
     for (tx, ty), data in tiles.items():
         if not data:
@@ -286,9 +317,11 @@ def compose_map(
             tile = Image.open(BytesIO(data)).convert("RGBA")
         except Exception:  # noqa: BLE001 - a bad tile just leaves a grey square
             continue
-        image.paste(tile, (round(tx * TILE_SIZE - plan.left), round(ty * TILE_SIZE - plan.top)))
+        if tile.size != (tile_px, tile_px):
+            tile = tile.resize((tile_px, tile_px), Image.LANCZOS)
+        image.paste(tile, (round(tx * tile_px - plan.left), round(ty * tile_px - plan.top)))
 
-    s = _SCALE
+    s = _SCALE  # supersampling on top of the output scale, for smooth edges
     overlay = Image.new("RGBA", (plan.width * s, plan.height * s), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
@@ -302,48 +335,49 @@ def compose_map(
             hx, hy = px(lon, lat)
             rpx = radius / metres_per_pixel(lat, plan.zoom) * s
             draw.ellipse([hx - rpx, hy - rpx, hx + rpx, hy + rpx],
-                         fill=COLOR_HOME + (28,), outline=COLOR_HOME + (200,), width=2 * s)
+                         fill=COLOR_HOME + (28,), outline=COLOR_HOME + (200,), width=2 * s * k)
 
     # Outage polygons (upcoming first so current ones sit on top)
     for color, geometries in layers:
         for ring in iter_rings(geometries):
             points = [px(pt[0], pt[1]) for pt in ring]
             draw.polygon(points, fill=color + (100,))
-            draw.line(points + [points[0]], fill=color + (255,), width=3 * s, joint="curve")
+            draw.line(points + [points[0]], fill=color + (255,), width=3 * s * k, joint="curve")
 
     # Feeder lines: opaque, ~2/3 the width of an outage outline, with a thin
     # black outline so light colours (e.g. cyan) stand out from the map.
-    paths = [
-        (color, [px(pt[0], pt[1]) for pt in path])
-        for color, geometry in lines
-        for path in iter_lines(geometry)
-        if len(path) >= 2
-    ]
+    min_len = 2 * s * k  # drop stubs too short to read (simplification leftovers)
+    paths = []
+    for color, geometry in lines:
+        for path in iter_lines(geometry):
+            points = [px(pt[0], pt[1]) for pt in path]
+            if len(points) >= 2 and _path_length(points) >= min_len:
+                paths.append((color, points))
+    # All outlines first, then all colours, so junctions merge cleanly; round
+    # caps so ends finish neatly instead of in square blocks.
     for _, points in paths:
-        draw.line(points, fill=(0, 0, 0, 230), width=3 * s, joint="curve")
+        _round_line(draw, points, (0, 0, 0, 230), 3 * s * k)
     for color, points in paths:
-        draw.line(points, fill=color + (255,), width=2 * s, joint="curve")
+        _round_line(draw, points, color + (255,), 2 * s * k)
 
     # Location markers
     for lat, lon, _ in zones:
         hx, hy = px(lon, lat)
-        draw.ellipse([hx - 9 * s, hy - 9 * s, hx + 9 * s, hy + 9 * s], fill=(255, 255, 255, 255))
-        draw.ellipse([hx - 6 * s, hy - 6 * s, hx + 6 * s, hy + 6 * s], fill=COLOR_HOME + (255,))
+        outer, inner = 9 * s * k, 6 * s * k
+        draw.ellipse([hx - outer, hy - outer, hx + outer, hy + outer], fill=(255, 255, 255, 255))
+        draw.ellipse([hx - inner, hy - inner, hx + inner, hy + inner], fill=COLOR_HOME + (255,))
 
     overlay = overlay.resize((plan.width, plan.height), Image.LANCZOS)
     image = Image.alpha_composite(image, overlay)
 
     # Attribution (required by the OpenStreetMap tile policy)
     draw = ImageDraw.Draw(image)
-    try:
-        font = ImageFont.load_default(size=11)
-    except TypeError:  # Pillow < 10.1
-        font = ImageFont.load_default()
+    font = _font(11 * k)
     credit = ATTRIBUTION + (" · Feeders: Energy Queensland" if lines else "")
     left, top, right, bottom = draw.textbbox((0, 0), credit, font=font)
     tw, th = right - left, bottom - top
-    x0, y0 = plan.width - tw - 8, plan.height - th - 6
-    draw.rectangle([x0 - 4, y0 - 3, plan.width, plan.height], fill=(255, 255, 255, 200))
+    x0, y0 = plan.width - tw - 8 * k, plan.height - th - 6 * k
+    draw.rectangle([x0 - 4 * k, y0 - 3 * k, plan.width, plan.height], fill=(255, 255, 255, 200))
     draw.text((x0 - left, y0 - top), credit, fill=(60, 60, 60, 255), font=font)
 
     out = BytesIO()
@@ -400,43 +434,45 @@ def compose_details(
 ) -> bytes:
     """Append a white panel with the outage details under a rendered map.
 
+    Sizes follow the map's resolution (a 1280-wide map gets 2x text).
     `legend` adds a row of colour swatches (e.g. the feeders in the area).
     """
     base = Image.open(BytesIO(map_png)).convert("RGB")
     width = base.width
-    title_font, sub_font, label_font, value_font = _font(22), _font(16), _font(15), _font(16)
+    k = max(1, round(width / MAP_WIDTH))
+    pad, label_w, line_h = _PAD * k, _LABEL_W * k, 22 * k
+    title_font, sub_font, label_font, value_font = _font(22 * k), _font(16 * k), _font(15 * k), _font(16 * k)
     scratch = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    value_w = width - 2 * _PAD - _LABEL_W
-    line_h = 22
+    value_w = width - 2 * pad - label_w
 
     wrapped = [(label, _wrap(scratch, value or "Unknown", value_font, value_w, max_lines)) for label, value in rows]
-    height = _PAD + 30 + 26 + 14 + sum(len(v) * line_h + 10 for _, v in wrapped) + _PAD
+    height = pad + (30 + 26 + 14) * k + sum(len(v) * line_h + 10 * k for _, v in wrapped) + pad
     if legend:
-        height += len(legend) * line_h + 10
+        height += len(legend) * line_h + 10 * k
 
     image = Image.new("RGB", (width, base.height + height), _PANEL_BG)
     image.paste(base, (0, 0))
     draw = ImageDraw.Draw(image)
-    y = base.height + _PAD
-    draw.text((_PAD, y), title, font=title_font, fill=_TEXT)
-    y += 30
-    draw.text((_PAD, y), subtitle, font=sub_font, fill=_MUTED)
-    y += 26
-    draw.line([(_PAD, y), (width - _PAD, y)], fill=_RULE, width=1)
-    y += 14
+    y = base.height + pad
+    draw.text((pad, y), title, font=title_font, fill=_TEXT)
+    y += 30 * k
+    draw.text((pad, y), subtitle, font=sub_font, fill=_MUTED)
+    y += 26 * k
+    draw.line([(pad, y), (width - pad, y)], fill=_RULE, width=k)
+    y += 14 * k
     for label, lines in wrapped:
-        draw.text((_PAD, y + 1), label, font=label_font, fill=_MUTED)
+        draw.text((pad, y + k), label, font=label_font, fill=_MUTED)
         for i, line in enumerate(lines):
-            draw.text((_PAD + _LABEL_W, y + i * line_h), line, font=value_font, fill=_TEXT)
-        y += len(lines) * line_h + 10
+            draw.text((pad + label_w, y + i * line_h), line, font=value_font, fill=_TEXT)
+        y += len(lines) * line_h + 10 * k
     if legend:
-        draw.text((_PAD, y + 1), legend_label, font=label_font, fill=_MUTED)
+        draw.text((pad, y + k), legend_label, font=label_font, fill=_MUTED)
         for i, (color, text) in enumerate(legend):
             ly = y + i * line_h
-            swatch = [(_PAD + _LABEL_W, ly + 10), (_PAD + _LABEL_W + 22, ly + 10)]
-            draw.line(swatch, fill=(0, 0, 0), width=6)  # same black outline as the map
-            draw.line(swatch, fill=color, width=4)
-            draw.text((_PAD + _LABEL_W + 32, ly), text, font=value_font, fill=_TEXT)
+            swatch = [(pad + label_w, ly + 10 * k), (pad + label_w + 22 * k, ly + 10 * k)]
+            draw.line(swatch, fill=(0, 0, 0), width=6 * k)  # same black outline as the map
+            draw.line(swatch, fill=color, width=4 * k)
+            draw.text((pad + label_w + 32 * k, ly), text, font=value_font, fill=_TEXT)
 
     out = BytesIO()
     image.save(out, format="PNG", optimize=True)

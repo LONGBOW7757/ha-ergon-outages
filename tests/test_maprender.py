@@ -88,3 +88,27 @@ def test_details_panel_wraps_and_truncates() -> None:
     assert h_base == MAP_HEIGHT < h_short < h_long
     # 60 street names are capped at 4 lines, so the panel stays a sane size.
     assert h_long - h_short <= 4 * 22
+
+
+
+def test_doubled_plan_is_the_same_view_at_twice_the_resolution() -> None:
+    plan = plan_map(Z(2000))
+    hi = plan.doubled()
+    assert (hi.width, hi.height, hi.zoom) == (2 * plan.width, 2 * plan.height, plan.zoom + 1)
+    x1, y1 = plan.to_image(HOME[1] + 0.01, HOME[0] - 0.01)
+    x2, y2 = hi.to_image(HOME[1] + 0.01, HOME[0] - 0.01)
+    assert abs(x2 - 2 * x1) < 1e-6 and abs(y2 - 2 * y1) < 1e-6
+    assert all(abs(a - b) < 1e-9 for a, b in zip(plan.bounds(), hi.bounds()))
+
+
+def test_scaled_output_and_details_panel() -> None:
+    from custom_components.ergon_outages.maprender import compose_details
+
+    hi = plan_map(Z(250)).doubled()
+    png = compose_map(hi, {t: None for t in hi.tiles()}, Z(250), [], scale=2)
+    assert Image.open(BytesIO(png)).size == (2 * MAP_WIDTH, 2 * MAP_HEIGHT)
+    one = compose_details(compose_map(plan_map(Z(250)), {}, Z(250), []), "T", "S", [("Reason", "x")])
+    two = compose_details(png, "T", "S", [("Reason", "x")])
+    h1 = Image.open(BytesIO(one)).height - MAP_HEIGHT
+    h2 = Image.open(BytesIO(two)).height - 2 * MAP_HEIGHT
+    assert h2 == 2 * h1  # the panel scales with the map

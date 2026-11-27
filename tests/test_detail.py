@@ -63,7 +63,7 @@ async def test_detail_map_entity_has_everything(hass: HomeAssistant, aioclient_m
     assert attrs["status"] == "Crews on route"
     assert attrs["reason"] == "Replace power poles and improve the electricity network"
     assert attrs["customers_affected"] == 42
-    assert attrs["suburbs"] == "Charleville"
+    assert attrs["suburbs"] == "Longreach"
     assert attrs["streets"] == "Alfred St, Wills St"
     assert attrs["start"] is not None and attrs["estimated_restoration"] is not None
     assert attrs["entity_picture"].startswith("/api/image_proxy/image.ergon_outages_home_outage_26aa1_map")
@@ -166,8 +166,8 @@ async def test_outage_picture_includes_details_panel(
         return Image.open(BytesIO(await resp.read())).height
 
     detail = "image.ergon_outages_home_outage_26aa1_map"
-    assert await height("image.ergon_outages_home_outage_map") == MAP_HEIGHT  # overview: map only
-    assert await height(detail) > MAP_HEIGHT + 200  # map + details panel
+    assert await height("image.ergon_outages_home_outage_map") == 2 * MAP_HEIGHT  # overview: 2x map only
+    assert await height(detail) > 2 * MAP_HEIGHT + 400  # 2x map + details panel
 
     # A status change (same shape) refreshes the picture.
     before = hass.states.get(detail).state

@@ -43,6 +43,7 @@ _LOGGER = logging.getLogger(__name__)
 _DATA_TILES = f"{DOMAIN}_tiles"
 _TILE_CACHE_MAX = 256
 _PNG_CACHE_MAX = 24
+RENDER_SCALE = 2  # output resolution multiplier (1280x800 maps)
 _TILE_TIMEOUT = aiohttp.ClientTimeout(total=15)
 
 Geometry = dict[str, Any]
@@ -129,18 +130,26 @@ async def async_render_spec(hass: HomeAssistant, spec: MapSpec) -> bytes:
 async def async_render_spec_with_feeders(
     hass: HomeAssistant, spec: MapSpec
 ) -> tuple[bytes, list[tuple[Feeder, RGB]]]:
-    """Render a spec, also returning the feeder lines drawn on it and their colours."""
-    plan = plan_map(spec.zones, spec.frame, spec.points)
+    """Render a spec, also returning the feeder lines drawn on it and their colours.
+
+    Output is 2x resolution (1280x800): the view is planned at 640x400, then
+    drawn one zoom level up with standard tiles, so the background, lines and
+    text are all sharp on a phone screen.
+    """
+    plan = plan_map(spec.zones, spec.frame, spec.points).doubled()
     tiles = plan.tiles()
     fetches = [_async_fetch_tile(hass, plan.tile_url(t)) for t in tiles]
     if spec.feeders:
         fetches.append(async_get_feeders(hass, plan.bounds(), plan.degrees_per_pixel))
     results = await asyncio.gather(*fetches)
     feeders: list[Feeder] = results.pop() if spec.feeders else []
-    colors = assign_feeder_colors({f.name: f.geometry for f in feeders}, plan)
+    colors = assign_feeder_colors({f.name: f.geometry for f in feeders}, plan, near_px=28 * RENDER_SCALE)
     lines = [(colors[f.name], f.geometry) for f in feeders]
     png = await hass.async_add_executor_job(
-        compose_map, plan, dict(zip(tiles, results)), spec.zones, spec.layers, lines
+        partial(
+            compose_map, plan, dict(zip(tiles, results)), spec.zones, spec.layers, lines,
+            scale=RENDER_SCALE,
+        )
     )
     return png, [(f, colors[f.name]) for f in feeders]
 

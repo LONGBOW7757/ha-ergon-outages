@@ -56,13 +56,13 @@ The integration fires these events. Each happens **once per outage change**, and
 
 Event data: `event_id`, `phase`, `outage_type` (`planned`/`unplanned`), `status`, `reason`, `customers_affected`, `suburbs`, `start`, `estimated_restoration` (ISO times or `null`), plus:
 
-- `location` – the affected location(s), e.g. `Morven` or `Augathella + Morven` (always alphabetical); `locations` – the same as a list
+- `location` – the affected location(s), e.g. `Mitchell` or `Mitchell + Roma` (always alphabetical); `locations` – the same as a list
 - `config_entry_id` / `config_entry_ids`, `map_entity_id`
 - `map_url` – a picture of the map zoomed to this outage (cleared outages are drawn in green where they were). The link works without a login for 7 days, so it's safe to attach to phone notifications.
 - `detail_entity_id` / `detail_entity_ids` – the outage's own map entity for each location, used as the tap target (empty for cleared outages)
 - `resent` – `true` when sent again via the Resend alerts button or action
 
-**Several locations, one alert:** when an outage overlaps more than one monitored location, you get a single alert naming them all in alphabetical order (`Augathella + Morven`) with a map showing each location's area. Whenever one location spots a change, the others are re-checked straight away so their reports can be combined.
+**Several locations, one alert:** when an outage overlaps more than one monitored location, you get a single alert naming them all in alphabetical order (`Mitchell + Roma`) with a map showing each location's area. Whenever one location spots a change, the others are re-checked straight away so their reports can be combined.
 
 Outages that already exist when you first add the integration are recorded quietly (no burst of alerts on day one). They still show up in the entities.
 
@@ -85,6 +85,8 @@ Without HACS cards, the built-in **Map** card can show a pin for each `sensor.er
 ## Power lines (feeders)
 
 Maps can show the local 11/22 kV **MV feeder lines** from Energy Queensland's public Network Capacity Map. Each feeder gets its own colour, and feeders running close together get strongly contrasting colours. The lines are thin, opaque and outlined in black (so light colours stay readable), drawn over the outage shading, so you can see which lines run through an outage. A tapped alert's details panel lists the feeders through that outage with a colour key.
+
+All map pictures are drawn at high resolution (1280 px wide) so lines and text stay sharp when enlarged on a phone; feeder lines have rounded ends.
 
 Turn this on or off per location with **Show power lines on maps** (**Configure**). Line data is downloaded only when a map is drawn, simplified to the map's resolution and cached for a day. Like the outage data, this is an unofficial use of a public map layer and may change without notice.
 
