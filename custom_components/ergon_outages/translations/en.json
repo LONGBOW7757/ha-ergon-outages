@@ -7,11 +7,13 @@
         "data": {
           "name": "Name",
           "location": "Location and radius",
-          "scan_interval": "Update interval"
+          "scan_interval": "Update interval",
+          "show_feeders": "Show power lines on maps"
         },
         "data_description": {
           "name": "Used in entity names, e.g. Home gives binary_sensor.ergon_outages_home_outage_now.",
-          "scan_interval": "Ergon refreshes its outage map roughly every 15 minutes."
+          "scan_interval": "Ergon refreshes its outage map roughly every 15 minutes.",
+          "show_feeders": "Draws the local 11/22 kV feeder lines (from Energy Queensland's Network Capacity Map), each in its own colour."
         }
       }
     },
@@ -28,7 +30,11 @@
         "title": "Ergon Energy outages",
         "data": {
           "location": "Location and radius",
-          "scan_interval": "Update interval"
+          "scan_interval": "Update interval",
+          "show_feeders": "Show power lines on maps"
+        },
+        "data_description": {
+          "show_feeders": "Draws the local 11/22 kV feeder lines (from Energy Queensland's Network Capacity Map), each in its own colour."
         }
       }
     },

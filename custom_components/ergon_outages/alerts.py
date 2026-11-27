@@ -139,6 +139,7 @@ class AlertHub:
             frame=geometries,
             cleared=geometries if not active else (),
             points=[(c.zone[0], c.zone[1]) for c in coordinators] if len(coordinators) > 1 else (),
+            feeders=any(c.show_feeders for c in coordinators),
         )
         map_url = async_create_map_link(self._hass, spec) if geometries else None
 

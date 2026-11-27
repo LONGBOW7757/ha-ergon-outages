@@ -106,6 +106,7 @@ async def test_config_flow_creates_entry(hass: HomeAssistant, aioclient_mock) ->
         CONF_LONGITUDE: 146.245,
         CONF_RADIUS: 300.0,
         CONF_SCAN_INTERVAL: 5,
+        "show_feeders": True,
     }
     # The query sent to ArcGIS: lon,lat order and the radius buffer.
     _, url, _, _ = aioclient_mock.mock_calls[-1]

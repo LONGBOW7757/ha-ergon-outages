@@ -19,6 +19,7 @@ from homeassistant.util import dt as dt_util
 from .api import ErgonApiError, async_query_outages
 from .const import (
     CONF_SCAN_INTERVAL,
+    CONF_SHOW_FEEDERS,
     DEFAULT_RADIUS_M,
     DEFAULT_SCAN_INTERVAL_MIN,
     DOMAIN,
@@ -59,6 +60,7 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
         self.latitude: float = settings[CONF_LATITUDE]
         self.longitude: float = settings[CONF_LONGITUDE]
         self.radius_m: float = float(settings.get(CONF_RADIUS, DEFAULT_RADIUS_M))
+        self.show_feeders: bool = bool(settings.get(CONF_SHOW_FEEDERS, True))
         self.map_renderer = MapRenderer(hass, self)
         self._session = async_get_clientsession(hass)
         self._store: Store[dict[str, Any]] = Store(

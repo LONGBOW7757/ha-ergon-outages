@@ -20,6 +20,7 @@ REQUEST_TIMEOUT: Final = 30  # seconds
 
 CONF_LOCATION: Final = "location"
 CONF_SCAN_INTERVAL: Final = "scan_interval"
+CONF_SHOW_FEEDERS: Final = "show_feeders"
 
 DEFAULT_NAME: Final = "Home"
 DEFAULT_RADIUS_M: Final = 250

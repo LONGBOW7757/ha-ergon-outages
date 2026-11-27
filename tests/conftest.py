@@ -16,6 +16,18 @@ def auto_enable_custom_integrations(enable_custom_integrations):
     yield
 
 
+@pytest.fixture(autouse=True)
+def no_real_feeders(request):
+    """Never hit the real feeder service; tests opt in with their own data."""
+    if "real_feeder_fetch" in request.keywords:
+        yield
+        return
+    from unittest.mock import patch
+
+    with patch("custom_components.ergon_outages.renderer.async_get_feeders", return_value=[]):
+        yield
+
+
 def ms(dt: datetime) -> int:
     return int(dt.timestamp() * 1000)
 

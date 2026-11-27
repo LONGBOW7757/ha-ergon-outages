@@ -16,6 +16,7 @@ from .api import ErgonApiError, async_query_outages
 from .const import (
     CONF_LOCATION,
     CONF_SCAN_INTERVAL,
+    CONF_SHOW_FEEDERS,
     DEFAULT_NAME,
     DEFAULT_RADIUS_M,
     DEFAULT_SCAN_INTERVAL_MIN,
@@ -43,6 +44,9 @@ def _location_fields(defaults: dict[str, Any]) -> dict[Any, Any]:
                 mode=selector.NumberSelectorMode.BOX,
             )
         ),
+        vol.Required(
+            CONF_SHOW_FEEDERS, default=defaults.get(CONF_SHOW_FEEDERS, True)
+        ): selector.BooleanSelector(),
     }
 
 
@@ -55,6 +59,7 @@ def _parse_location(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_LONGITUDE: float(location[CONF_LONGITUDE]),
         CONF_RADIUS: min(max(radius, 0.0), MAX_RADIUS_M),
         CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL]),
+        CONF_SHOW_FEEDERS: bool(user_input.get(CONF_SHOW_FEEDERS, True)),
     }
 
 
@@ -130,6 +135,7 @@ class ErgonOutagesOptionsFlow(OptionsFlow):
                 CONF_RADIUS: current.get(CONF_RADIUS, DEFAULT_RADIUS_M),
             },
             CONF_SCAN_INTERVAL: current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MIN),
+            CONF_SHOW_FEEDERS: current.get(CONF_SHOW_FEEDERS, True),
         }
 
         if user_input is not None:

@@ -7,6 +7,7 @@ from collections import OrderedDict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import partial
 import hashlib
 import json
 import logging
@@ -19,6 +20,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, TILE_USER_AGENT
+from .feeders import Feeder, async_get_feeders
 from .maprender import (
     COLOR_CLEARED,
     COLOR_CURRENT,
@@ -26,7 +28,9 @@ from .maprender import (
     RGB,
     Zone,
     compose_details,
+    assign_feeder_colors,
     compose_map,
+    line_touches_polygons,
     plan_map,
 )
 
@@ -80,12 +84,13 @@ class MapSpec:
     layers: tuple[tuple[RGB, tuple[Geometry, ...]], ...]
     frame: tuple[Geometry, ...] = ()
     points: tuple[tuple[float, float], ...] = ()  # (lat, lon) to keep in view
+    feeders: bool = False  # draw MV feeder lines
     _key: str = field(default="", compare=False, repr=False)
 
     @property
     def key(self) -> str:
         if not self._key:
-            blob = json.dumps([self.zones, self.layers, self.frame, self.points], default=str)
+            blob = json.dumps([self.zones, self.layers, self.frame, self.points, self.feeders], default=str)
             object.__setattr__(self, "_key", hashlib.sha1(blob.encode()).hexdigest())
         return self._key
 
@@ -96,6 +101,7 @@ def build_spec(
     frame: Sequence[Geometry] = (),
     cleared: Sequence[Geometry] = (),
     points: Sequence[tuple[float, float]] = (),
+    feeders: bool = False,
 ) -> MapSpec:
     """Current outages red, upcoming orange, cleared green (drawn on top)."""
     current: list[Geometry] = []
@@ -110,17 +116,33 @@ def build_spec(
         layers=tuple(layers),
         frame=tuple(frame),
         points=tuple(points),
+        feeders=feeders,
     )
 
 
 async def async_render_spec(hass: HomeAssistant, spec: MapSpec) -> bytes:
     """Render a spec to PNG over OpenStreetMap tiles."""
+    png, _ = await async_render_spec_with_feeders(hass, spec)
+    return png
+
+
+async def async_render_spec_with_feeders(
+    hass: HomeAssistant, spec: MapSpec
+) -> tuple[bytes, list[tuple[Feeder, RGB]]]:
+    """Render a spec, also returning the feeder lines drawn on it and their colours."""
     plan = plan_map(spec.zones, spec.frame, spec.points)
     tiles = plan.tiles()
-    data = await asyncio.gather(*(_async_fetch_tile(hass, plan.tile_url(t)) for t in tiles))
-    return await hass.async_add_executor_job(
-        compose_map, plan, dict(zip(tiles, data)), spec.zones, spec.layers
+    fetches = [_async_fetch_tile(hass, plan.tile_url(t)) for t in tiles]
+    if spec.feeders:
+        fetches.append(async_get_feeders(hass, plan.bounds(), plan.degrees_per_pixel))
+    results = await asyncio.gather(*fetches)
+    feeders: list[Feeder] = results.pop() if spec.feeders else []
+    colors = assign_feeder_colors({f.name: f.geometry for f in feeders}, plan)
+    lines = [(colors[f.name], f.geometry) for f in feeders]
+    png = await hass.async_add_executor_job(
+        compose_map, plan, dict(zip(tiles, results)), spec.zones, spec.layers, lines
     )
+    return png, [(f, colors[f.name]) for f in feeders]
 
 
 async def _async_fetch_tile(hass: HomeAssistant, url: str) -> bytes | None:
@@ -150,6 +172,7 @@ class MapRenderer:
         self._coordinator = coordinator
         self._lock = asyncio.Lock()
         self._pngs: OrderedDict[str, bytes] = OrderedDict()
+        self._feeders: dict[str, list[tuple[Feeder, RGB]]] = {}
 
     def signature(self) -> str:
         """Changes whenever anything drawn on this location's maps changes."""
@@ -166,7 +189,7 @@ class MapRenderer:
         outages = c.data or {}
         focused = outages.get(focus) if focus else None
         frame = focused.geometries if focused else [g for o in outages.values() for g in o.geometries]
-        return build_spec([c.zone], outages.values(), frame)
+        return build_spec([c.zone], outages.values(), frame, feeders=c.show_feeders)
 
     async def async_render(self, focus: str | None = None, *, details: bool = False) -> bytes:
         """The map (zoomed to `focus` if given), optionally with a details panel."""
@@ -182,10 +205,19 @@ class MapRenderer:
             if (png := self._pngs.get(key)) is not None:
                 self._pngs.move_to_end(key)
                 return png
-            png = self._pngs.get(spec.key) or await async_render_spec(self._hass, spec)
+            if (png := self._pngs.get(spec.key)) is None or spec.key not in self._feeders:
+                png, self._feeders[spec.key] = await async_render_spec_with_feeders(self._hass, spec)
             self._remember(spec.key, png)
             if text is not None:
-                png = await self._hass.async_add_executor_job(compose_details, png, *text)
+                # Feeders that run through this outage, as a colour key.
+                legend = [
+                    (color, f.label)
+                    for f, color in self._feeders.get(spec.key, [])
+                    if line_touches_polygons(f.geometry, outage.geometries)
+                ]
+                png = await self._hass.async_add_executor_job(
+                    partial(compose_details, png, *text, legend_label="Feeders", legend=legend[:8])
+                )
                 self._remember(key, png)
             return png
 
@@ -193,4 +225,5 @@ class MapRenderer:
         self._pngs[key] = png
         self._pngs.move_to_end(key)
         while len(self._pngs) > _PNG_CACHE_MAX:
-            self._pngs.popitem(last=False)
+            old, _ = self._pngs.popitem(last=False)
+            self._feeders.pop(old, None)
