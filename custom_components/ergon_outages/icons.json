@@ -41,6 +41,16 @@
           "future": "mdi:calendar-clock"
         }
       }
+    },
+    "button": {
+      "resend_alerts": {
+        "default": "mdi:bell-ring"
+      }
+    }
+  },
+  "services": {
+    "resend_alerts": {
+      "service": "mdi:bell-ring"
     }
   }
 }

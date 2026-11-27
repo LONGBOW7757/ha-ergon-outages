@@ -53,6 +53,7 @@ actions:
         {%- elif trigger.id == 'updated' %}🔄 Outage update
         {%- elif o.phase == 'current' %}⚡ Power outage now
         {%- else %}📅 Planned outage{% endif %} · {{ o.location }}
+        {%- if o.resent %} (resent){% endif %}
       message: |-
         {%- if trigger.id == 'cleared' -%}
         Outage {{ o.event_id }} is no longer listed by Ergon.

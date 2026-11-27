@@ -48,6 +48,7 @@ class _Report:
     coordinator: ErgonOutagesCoordinator
     summary: dict[str, Any]
     geometries: list[dict[str, Any]]
+    resent: bool = False
 
 
 @dataclass
@@ -79,10 +80,14 @@ class AlertHub:
         kind: str,
         summary: dict[str, Any],
         geometries: list[dict[str, Any]],
+        *,
+        resent: bool = False,
     ) -> None:
         event_id = summary["event_id"]
         pending = self._pending.setdefault((kind, event_id), _PendingAlert(kind, event_id))
-        pending.reports[coordinator.config_entry.entry_id] = _Report(coordinator, summary, geometries)
+        pending.reports[coordinator.config_entry.entry_id] = _Report(
+            coordinator, summary, geometries, resent
+        )
         if self._window is None:
             self._window = self._hass.async_create_task(
                 self._async_window(coordinator), f"{DOMAIN} alert window"
@@ -154,5 +159,7 @@ class AlertHub:
                 "map_url": map_url,
                 "detail_entity_id": detail_ids[0] if detail_ids else None,
                 "detail_entity_ids": detail_ids,
+                # True when sent again via the Resend alerts button/action.
+                "resent": any(r.resent for r in reports),
             },
         )

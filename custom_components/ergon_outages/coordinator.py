@@ -72,7 +72,8 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
         # still show where it was. Persisted with the snapshot.
         self._known_geometries: dict[str, list[dict[str, Any]]] = {}
         self._entities_ready = False
-        self._pending: list[tuple[str, dict[str, Any], list[dict[str, Any]]]] = []
+        self._pending: list[tuple[str, dict[str, Any], list[dict[str, Any]], bool]] = []
+        self._resending = False
         # Serialises polls: the alert hub can ask for an extra check while a
         # scheduled one is running.
         self._poll_lock = asyncio.Lock()
@@ -113,6 +114,7 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
 
         outages = parse_features(features, dt_util.utcnow())
         events, snapshot = diff_outages(self._known or {}, outages)
+        resent, self._resending = self._resending, False
         geometries = {eid: o.geometries for eid, o in outages.items()}
 
         if self._known is None:
@@ -129,7 +131,7 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
                     if kind == KIND_CLEARED
                     else outages[eid].geometries
                 )
-                self._pending.append((kind, summary, shape))
+                self._pending.append((kind, summary, shape, resent))
 
         if snapshot != self._known or geometries != self._known_geometries:
             self._known = snapshot
@@ -139,6 +141,17 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
         if self._entities_ready:
             self._async_submit_pending()
         return outages
+
+    @callback
+    def async_prepare_resend(self) -> None:
+        """Forget what has been announced, so the next poll alerts for everything."""
+        self._known = {}
+        self._resending = True
+
+    async def async_resend_alerts(self) -> None:
+        """Re-check Ergon now and resend an alert for every outage here."""
+        self.async_prepare_resend()
+        await self.async_refresh()
 
     @callback
     def async_entities_ready(self) -> None:
@@ -158,8 +171,8 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
 
         hub = async_get_alert_hub(self.hass)
         pending, self._pending = self._pending, []
-        for kind, summary, shape in pending:
-            hub.async_submit(self, kind, summary, shape)
+        for kind, summary, shape, resent in pending:
+            hub.async_submit(self, kind, summary, shape, resent=resent)
 
     @callback
     def async_detail_entity_id(self, event_id: str) -> str | None:

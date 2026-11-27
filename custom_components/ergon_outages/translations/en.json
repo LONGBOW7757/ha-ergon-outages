@@ -73,6 +73,28 @@
           "future": "Upcoming"
         }
       }
+    },
+    "button": {
+      "resend_alerts": {
+        "name": "Resend alerts"
+      }
+    }
+  },
+  "services": {
+    "resend_alerts": {
+      "name": "Resend alerts",
+      "description": "Re-checks Ergon and sends a fresh alert for every outage (current and upcoming) at the chosen location, or at every location. Outages shared by several locations arrive as one combined alert.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Location",
+          "description": "Only this location. Leave empty for every location."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "unknown_location": {
+      "message": "That Ergon outage location isn't loaded."
     }
   }
 }

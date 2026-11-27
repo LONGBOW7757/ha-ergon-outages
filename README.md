@@ -33,6 +33,7 @@ Entity IDs below assume the location is named `Home`.
 | `binary_sensor.ergon_outages_home_outage_now` | **On** while an outage covers the location. The `geojson` attribute holds the outage areas. |
 | `binary_sensor.ergon_outages_home_upcoming_outage` | **On** while a planned outage is scheduled. The `geojson` attribute holds the outage areas. |
 | `image.ergon_outages_home_outage_map` | Map picture of the area: your location and search circle, current outages in red, upcoming ones in orange. Used for notification images and dashboards. |
+| `button.ergon_outages_home_resend_alerts` | Re-checks Ergon and resends an alert for every outage at this location (see Notifications). |
 | `sensor.ergon_outages_home_current_outages` | Number of outages happening now |
 | `sensor.ergon_outages_home_upcoming_outages` | Number of scheduled outages |
 | `sensor.ergon_outages_home_next_outage_start` | When the next planned outage starts |
@@ -59,10 +60,13 @@ Event data: `event_id`, `phase`, `outage_type` (`planned`/`unplanned`), `status`
 - `config_entry_id` / `config_entry_ids`, `map_entity_id`
 - `map_url` – a picture of the map zoomed to this outage (cleared outages are drawn in green where they were). The link works without a login for 7 days, so it's safe to attach to phone notifications.
 - `detail_entity_id` / `detail_entity_ids` – the outage's own map entity for each location, used as the tap target (empty for cleared outages)
+- `resent` – `true` when sent again via the Resend alerts button or action
 
 **Several locations, one alert:** when an outage overlaps more than one monitored location, you get a single alert naming them all in alphabetical order (`Augathella + Morven`) with a map showing each location's area. Whenever one location spots a change, the others are re-checked straight away so their reports can be combined.
 
 Outages that already exist when you first add the integration are recorded quietly (no burst of alerts on day one). They still show up in the entities.
+
+**Resend alerts (for testing):** each location has a **Resend alerts** button (on its device page). Pressing it re-checks Ergon and sends a fresh alert for every outage that location covers, current and upcoming, with maps and tap-to-open. To resend for every location at once, run the **Ergon Energy Outages: Resend alerts** action (`ergon_outages.resend_alerts`) from **Developer tools → Actions**; outages shared by several locations then arrive as one combined alert. Resent alerts carry `resent: true` (the example adds "(resent)" to the title). Locations with lots of planned work can send a burst of alerts.
 
 A ready-made automation is in [examples/notifications.yaml](examples/notifications.yaml). Paste it in **Settings → Automations & scenes → Create automation → ⋮ → Edit in YAML**, then change `notify.notify` to your phone (e.g. `notify.mobile_app_<your_phone>`).
 
