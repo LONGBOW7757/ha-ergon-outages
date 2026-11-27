@@ -1,31 +1,24 @@
-"""Image entity: a static map of the outages, for dashboards and notifications."""
+"""Map images: one overview per location, plus one per outage.
+
+The per-outage image is what a notification opens when tapped: its pop-up
+shows a map zoomed to that outage with every detail of the outage below it.
+"""
 
 from __future__ import annotations
 
-import asyncio
-import hashlib
-import json
-import logging
-
-import aiohttp
+from typing import Any
 
 from homeassistant.components.image import ImageEntity
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import TILE_USER_AGENT
+from .const import OUTAGE_MAP_KEY_PREFIX
 from .coordinator import ErgonConfigEntry, ErgonOutagesCoordinator
-from .entity import ErgonOutagesEntity, outages_in_phase
-from .maprender import COLOR_CURRENT, COLOR_FUTURE, compose_map, plan_map
-from .models import PHASE_CURRENT, PHASE_FUTURE
-
-_LOGGER = logging.getLogger(__name__)
+from .entity import ErgonOutagesEntity, async_track_outage_entities, outage_attributes
+from .models import Outage
 
 PARALLEL_UPDATES = 0
-_TILE_CACHE_MAX = 256
-_TILE_TIMEOUT = aiohttp.ClientTimeout(total=15)
 
 
 async def async_setup_entry(
@@ -33,49 +26,35 @@ async def async_setup_entry(
     entry: ErgonConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    async_add_entities([ErgonOutageMapImage(entry.runtime_data)])
+    coordinator = entry.runtime_data
+    async_add_entities([ErgonOutageMapImage(coordinator)])
+    async_track_outage_entities(
+        hass,
+        entry,
+        "image",
+        OUTAGE_MAP_KEY_PREFIX,
+        lambda event_id: ErgonOutageDetailImage(coordinator, event_id),
+        async_add_entities,
+    )
 
 
-class ErgonOutageMapImage(ErgonOutagesEntity, ImageEntity):
-    """Map of current (red) and upcoming (orange) outages around the location.
+class _ErgonMapImage(ErgonOutagesEntity, ImageEntity):
+    """Common behaviour: re-render only when the drawn outages change."""
 
-    The picture is only re-rendered when the set of outages or their areas
-    change, so the OpenStreetMap tile servers are hit rarely.
-    """
-
-    _attr_translation_key = "outage_map"
     _attr_content_type = "image/png"
+    _focus: str | None = None
 
-    def __init__(self, coordinator: ErgonOutagesCoordinator) -> None:
-        ErgonOutagesEntity.__init__(self, coordinator, "outage_map")
+    def __init__(self, coordinator: ErgonOutagesCoordinator, key: str) -> None:
+        ErgonOutagesEntity.__init__(self, coordinator, key)
         ImageEntity.__init__(self, coordinator.hass)
         self._signature: str | None = None
-        self._png: bytes | None = None
-        self._png_signature: str | None = None
-        self._render_lock = asyncio.Lock()
-        self._tile_cache: dict[str, bytes] = {}
         self._refresh_signature()
-        coordinator.map_image = self
 
-    def _current_signature(self) -> str:
-        parts = [
-            (o.event_id, o.phase, o.geometries)
-            for o in sorted((self.coordinator.data or {}).values(), key=lambda o: o.event_id)
-        ]
-        blob = json.dumps(
-            [parts, self.coordinator.latitude, self.coordinator.longitude, self.coordinator.radius_m],
-            sort_keys=True,
-            default=str,
-        )
-        return hashlib.sha1(blob.encode()).hexdigest()
-
-    def _refresh_signature(self) -> bool:
-        signature = self._current_signature()
-        if signature == self._signature:
-            return False
-        self._signature = signature
-        self._attr_image_last_updated = dt_util.utcnow()
-        return True
+    def _refresh_signature(self) -> None:
+        signature = self.coordinator.map_renderer.signature()
+        if signature != self._signature:
+            self._signature = signature
+            self._attr_image_last_updated = dt_util.utcnow()
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -83,46 +62,40 @@ class ErgonOutageMapImage(ErgonOutagesEntity, ImageEntity):
         super()._handle_coordinator_update()
 
     async def async_image(self) -> bytes | None:
-        async with self._render_lock:
-            if self._png is not None and self._png_signature == self._signature:
-                return self._png
-            signature = self._signature
-            png = await self._async_render()
-            self._png, self._png_signature = png, signature
-            return png
+        return await self.coordinator.map_renderer.async_render(self._focus)
 
-    async def _async_render(self) -> bytes:
-        coordinator = self.coordinator
-        home = (coordinator.latitude, coordinator.longitude)
-        current = [g for o in outages_in_phase(coordinator, PHASE_CURRENT) for g in o.geometries]
-        future = [g for o in outages_in_phase(coordinator, PHASE_FUTURE) for g in o.geometries]
 
-        plan = plan_map(home, coordinator.radius_m, current + future)
-        tiles = plan.tiles()
-        results = await asyncio.gather(*(self._async_fetch_tile(plan.tile_url(t)) for t in tiles))
-        return await self.hass.async_add_executor_job(
-            compose_map,
-            plan,
-            dict(zip(tiles, results)),
-            home,
-            coordinator.radius_m,
-            [(COLOR_FUTURE, future), (COLOR_CURRENT, current)],
-        )
+class ErgonOutageMapImage(_ErgonMapImage):
+    """All current (red) and upcoming (orange) outages around the location."""
 
-    async def _async_fetch_tile(self, url: str) -> bytes | None:
-        if (cached := self._tile_cache.get(url)) is not None:
-            return cached
-        session = async_get_clientsession(self.hass)
-        try:
-            async with session.get(
-                url, headers={"User-Agent": TILE_USER_AGENT}, timeout=_TILE_TIMEOUT
-            ) as resp:
-                resp.raise_for_status()
-                data = await resp.read()
-        except (aiohttp.ClientError, TimeoutError) as err:
-            _LOGGER.debug("Map tile %s unavailable: %s", url, err)
-            return None
-        if len(self._tile_cache) >= _TILE_CACHE_MAX:
-            self._tile_cache.pop(next(iter(self._tile_cache)))
-        self._tile_cache[url] = data
-        return data
+    _attr_translation_key = "outage_map"
+
+    def __init__(self, coordinator: ErgonOutagesCoordinator) -> None:
+        super().__init__(coordinator, "outage_map")
+
+
+class ErgonOutageDetailImage(_ErgonMapImage):
+    """One outage: a map zoomed to it, with all its details as attributes."""
+
+    _attr_translation_key = "outage_detail_map"
+    _unrecorded_attributes = frozenset({"streets", "suburbs"})
+
+    def __init__(self, coordinator: ErgonOutagesCoordinator, event_id: str) -> None:
+        self._focus = event_id
+        super().__init__(coordinator, f"{OUTAGE_MAP_KEY_PREFIX}{event_id}")
+        self._attr_name = f"Outage {event_id} map"
+
+    @property
+    def _outage(self) -> Outage | None:
+        return (self.coordinator.data or {}).get(self._focus)
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._outage is not None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        outage = self._outage
+        if outage is None:
+            return {"event_id": self._focus}
+        return {"location": self.coordinator.config_entry.title, **outage_attributes(outage)}

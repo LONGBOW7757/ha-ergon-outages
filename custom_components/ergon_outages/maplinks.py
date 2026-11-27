@@ -35,6 +35,7 @@ _DATA_LINKS = f"{DOMAIN}_map_links"
 class MapLink:
     entry_id: str
     created: datetime
+    focus: str | None = None
     png: bytes | None = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -53,8 +54,11 @@ def _links(hass: HomeAssistant) -> OrderedDict[str, MapLink]:
 
 
 @callback
-def async_create_map_link(hass: HomeAssistant, entry_id: str) -> str:
-    """Return a new relative URL serving a snapshot of the entry's map."""
+def async_create_map_link(hass: HomeAssistant, entry_id: str, focus: str | None = None) -> str:
+    """Return a new relative URL serving a snapshot of the entry's map.
+
+    With `focus` (an EVENT_ID) the map is zoomed to that outage.
+    """
     links = _links(hass)
     cutoff = dt_util.utcnow() - LINK_TTL
     for token in [t for t, link in links.items() if link.created < cutoff]:
@@ -62,7 +66,7 @@ def async_create_map_link(hass: HomeAssistant, entry_id: str) -> str:
     while len(links) >= MAX_LINKS:
         links.popitem(last=False)
     token = secrets.token_urlsafe(24)
-    links[token] = MapLink(entry_id=entry_id, created=dt_util.utcnow())
+    links[token] = MapLink(entry_id=entry_id, created=dt_util.utcnow(), focus=focus)
     return URL_PATH.format(token=token)
 
 
@@ -84,15 +88,9 @@ class ErgonMapLinkView(HomeAssistantView):
                 # First download renders the map as it is now; later downloads
                 # (e.g. iOS re-fetching on expand) get the same snapshot.
                 entry = hass.config_entries.async_get_entry(link.entry_id)
-                if (
-                    entry is None
-                    or entry.state is not ConfigEntryState.LOADED
-                    or (image := entry.runtime_data.map_image) is None
-                ):
+                if entry is None or entry.state is not ConfigEntryState.LOADED:
                     raise web.HTTPNotFound
-                link.png = await image.async_image()
-                if link.png is None:
-                    raise web.HTTPServiceUnavailable
+                link.png = await entry.runtime_data.map_renderer.async_render(link.focus)
 
         return web.Response(
             body=link.png,

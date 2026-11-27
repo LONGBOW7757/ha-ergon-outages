@@ -37,6 +37,7 @@ Entity IDs below assume the location is named `Home`.
 | `sensor.ergon_outages_home_upcoming_outages` | Number of scheduled outages |
 | `sensor.ergon_outages_home_next_outage_start` | When the next planned outage starts |
 | `sensor.ergon_outages_home_estimated_restoration` | Ergon's estimated restoration time for current outages (the latest, if several) |
+| `image.ergon_outages_home_outage_<event id>_map` | One per outage: a map zoomed to that outage, with every detail as attributes (location, event ID, type, status, reason, customers affected, suburbs, streets, start and estimated restoration). Its pop-up is what an alert opens when tapped. Created and removed with the outage. |
 | `sensor.ergon_outages_home_outage_<event id>` | One per outage: **Current** or **Upcoming**, with reason, status, customers affected, suburbs, streets, start, estimated restoration, map position and polygon. It is created when the outage appears and removed when it clears. |
 
 "Current" means the outage's start time has passed or isn't set; "Upcoming" means it starts in the future. Ergon rarely gives a restoration time for new faults, so expect "unknown" early on.
@@ -52,7 +53,7 @@ The integration fires these events. Each happens **once per outage change**, and
 | `ergon_outages_outage_updated` | Status, start, restoration time or customer count changed |
 | `ergon_outages_outage_cleared` | The outage is no longer listed |
 
-Event data: `event_id`, `phase`, `outage_type` (`planned`/`unplanned`), `status`, `reason`, `customers_affected`, `suburbs`, `start`, `estimated_restoration` (ISO times or `null`), `location`, `config_entry_id`, `map_entity_id`, and `map_url` (a picture of the map for this alert; the link works without a login for 7 days, so it's safe to attach to phone notifications; not included for cleared events).
+Event data: `event_id`, `phase`, `outage_type` (`planned`/`unplanned`), `status`, `reason`, `customers_affected`, `suburbs`, `start`, `estimated_restoration` (ISO times or `null`), `location`, `config_entry_id`, `map_entity_id`, `map_url` (a picture of the map zoomed to this outage; the link works without a login for 7 days, so it's safe to attach to phone notifications) and `detail_entity_id` (the outage's own map entity, used as the tap target). `map_url` and `detail_entity_id` are empty for cleared events.
 
 Outages that already exist when you first add the integration are recorded quietly (no burst of alerts on day one). They still show up in the entities.
 
@@ -60,7 +61,7 @@ A ready-made automation is in [examples/notifications.yaml](examples/notificatio
 
 ## Map
 
-**Notifications with a map:** the example automation attaches the `Outage map` picture to new and started outage alerts. Your phone downloads it from Home Assistant when the alert arrives, so this only works if the phone can reach Home Assistant at that moment (on home Wi‑Fi, or anywhere with remote access such as Home Assistant Cloud). Otherwise the alert arrives without the picture.
+**Notifications with a map:** the example automation attaches a map zoomed to the outage to every alert except "cleared". **Tapping the alert** opens that outage's pop-up in the Home Assistant app: the map plus every detail of the outage. Your phone downloads it from Home Assistant when the alert arrives, so this only works if the phone can reach Home Assistant at that moment (on home Wi‑Fi, or anywhere with remote access such as Home Assistant Cloud). Otherwise the alert arrives without the picture.
 
 The map zooms to fit the outage areas found within your radius (or shows the whole search circle when there are none). Map tiles come from OpenStreetMap and are only downloaded when the outages change.
 

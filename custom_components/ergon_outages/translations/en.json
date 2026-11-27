@@ -38,17 +38,34 @@
   },
   "entity": {
     "binary_sensor": {
-      "outage_now": { "name": "Outage now" },
-      "upcoming_outage": { "name": "Upcoming outage" }
+      "outage_now": {
+        "name": "Outage now"
+      },
+      "upcoming_outage": {
+        "name": "Upcoming outage"
+      }
     },
     "image": {
-      "outage_map": { "name": "Outage map" }
+      "outage_map": {
+        "name": "Outage map"
+      },
+      "outage_detail_map": {
+        "name": "Outage map"
+      }
     },
     "sensor": {
-      "current_outages": { "name": "Current outages" },
-      "upcoming_outages": { "name": "Upcoming outages" },
-      "next_outage_start": { "name": "Next outage start" },
-      "estimated_restoration": { "name": "Estimated restoration" },
+      "current_outages": {
+        "name": "Current outages"
+      },
+      "upcoming_outages": {
+        "name": "Upcoming outages"
+      },
+      "next_outage_start": {
+        "name": "Next outage start"
+      },
+      "estimated_restoration": {
+        "name": "Estimated restoration"
+      },
       "outage": {
         "name": "Outage",
         "state": {

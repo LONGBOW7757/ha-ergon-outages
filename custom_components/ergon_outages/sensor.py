@@ -13,17 +13,21 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DOMAIN
+from .const import OUTAGE_SENSOR_KEY_PREFIX
 from .coordinator import ErgonConfigEntry, ErgonOutagesCoordinator
-from .entity import ErgonOutagesEntity, feature_collection, format_local, outages_in_phase
+from .entity import (
+    ErgonOutagesEntity,
+    async_track_outage_entities,
+    feature_collection,
+    outage_attributes,
+    outages_in_phase,
+)
 from .models import PHASE_CURRENT, PHASE_FUTURE, Outage
 
 PARALLEL_UPDATES = 0
-OUTAGE_KEY_PREFIX = "outage_"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -99,37 +103,14 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
     async_add_entities(ErgonSummarySensor(coordinator, desc) for desc in SUMMARY_SENSORS)
 
-    ent_reg = er.async_get(hass)
-    outage_uid_prefix = f"{entry.entry_id}_{OUTAGE_KEY_PREFIX}"
-    tracked: set[str] = set()
-
-    # Outages that ended while Home Assistant was stopped leave registry
-    # entries behind; remove them before adding the live ones.
-    for reg_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
-        if reg_entry.domain != "sensor" or not reg_entry.unique_id.startswith(outage_uid_prefix):
-            continue
-        if reg_entry.unique_id.removeprefix(outage_uid_prefix) not in coordinator.data:
-            ent_reg.async_remove(reg_entry.entity_id)
-
-    @callback
-    def _async_sync_outage_entities() -> None:
-        current_ids = set(coordinator.data or {})
-
-        added = current_ids - tracked
-        if added:
-            tracked.update(added)
-            async_add_entities(ErgonOutageSensor(coordinator, eid) for eid in sorted(added))
-
-        for event_id in tracked - current_ids:
-            tracked.discard(event_id)
-            # Removing the registry entry also removes the live entity.
-            if entity_id := ent_reg.async_get_entity_id(
-                "sensor", DOMAIN, f"{outage_uid_prefix}{event_id}"
-            ):
-                ent_reg.async_remove(entity_id)
-
-    _async_sync_outage_entities()
-    entry.async_on_unload(coordinator.async_add_listener(_async_sync_outage_entities))
+    async_track_outage_entities(
+        hass,
+        entry,
+        "sensor",
+        OUTAGE_SENSOR_KEY_PREFIX,
+        lambda event_id: ErgonOutageSensor(coordinator, event_id),
+        async_add_entities,
+    )
 
 
 class ErgonSummarySensor(ErgonOutagesEntity, SensorEntity):
@@ -160,7 +141,7 @@ class ErgonOutageSensor(ErgonOutagesEntity, SensorEntity):
     _unrecorded_attributes = frozenset({"geojson", "streets", "suburbs"})
 
     def __init__(self, coordinator: ErgonOutagesCoordinator, event_id: str) -> None:
-        super().__init__(coordinator, f"{OUTAGE_KEY_PREFIX}{event_id}")
+        super().__init__(coordinator, f"{OUTAGE_SENSOR_KEY_PREFIX}{event_id}")
         self._event_id = event_id
         self._attr_name = f"Outage {event_id}"
 
@@ -183,17 +164,7 @@ class ErgonOutageSensor(ErgonOutagesEntity, SensorEntity):
         if outage is None:
             return {"event_id": self._event_id}
         attrs: dict[str, Any] = {
-            "event_id": outage.event_id,
-            "outage_type": outage.outage_type,
-            "status": outage.status,
-            "reason": outage.reason,
-            "customers_affected": outage.customers_affected,
-            "suburbs": outage.suburbs,
-            "streets": outage.streets,
-            "start": outage.start,
-            "estimated_restoration": outage.estimated_restoration,
-            "start_text": format_local(outage.start),
-            "estimated_restoration_text": format_local(outage.estimated_restoration),
+            **outage_attributes(outage),
             "geojson": feature_collection([outage]),
         }
         # latitude/longitude let the built-in Map card show a pin per outage.

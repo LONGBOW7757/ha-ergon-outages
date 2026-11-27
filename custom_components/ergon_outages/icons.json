@@ -3,24 +3,43 @@
     "binary_sensor": {
       "outage_now": {
         "default": "mdi:transmission-tower",
-        "state": { "on": "mdi:transmission-tower-off" }
+        "state": {
+          "on": "mdi:transmission-tower-off"
+        }
       },
       "upcoming_outage": {
         "default": "mdi:calendar-check",
-        "state": { "on": "mdi:calendar-alert" }
+        "state": {
+          "on": "mdi:calendar-alert"
+        }
       }
     },
     "image": {
-      "outage_map": { "default": "mdi:map-marker-radius" }
+      "outage_map": {
+        "default": "mdi:map-marker-radius"
+      },
+      "outage_detail_map": {
+        "default": "mdi:map-marker-alert"
+      }
     },
     "sensor": {
-      "current_outages": { "default": "mdi:transmission-tower-off" },
-      "upcoming_outages": { "default": "mdi:calendar-clock" },
-      "next_outage_start": { "default": "mdi:calendar-start" },
-      "estimated_restoration": { "default": "mdi:timer-sand" },
+      "current_outages": {
+        "default": "mdi:transmission-tower-off"
+      },
+      "upcoming_outages": {
+        "default": "mdi:calendar-clock"
+      },
+      "next_outage_start": {
+        "default": "mdi:calendar-start"
+      },
+      "estimated_restoration": {
+        "default": "mdi:timer-sand"
+      },
       "outage": {
         "default": "mdi:transmission-tower-off",
-        "state": { "future": "mdi:calendar-clock" }
+        "state": {
+          "future": "mdi:calendar-clock"
+        }
       }
     }
   }

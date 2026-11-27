@@ -21,7 +21,7 @@ async def test_entity_picture_link_works_without_login(
     entry = _entry()
     entry.add_to_hass(hass)
     with patch(
-        "custom_components.ergon_outages.image.ErgonOutageMapImage._async_fetch_tile",
+        "custom_components.ergon_outages.renderer.MapRenderer._async_fetch_tile",
         return_value=None,
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)

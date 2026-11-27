@@ -33,10 +33,17 @@ actions:
            if o.estimated_restoration else 'not yet known' }}
   - action: notify.notify
     data:
-      # Map snapshot (red = now, orange = upcoming). Each alert gets its own
-      # link that keeps working for 7 days.
+      # Map zoomed to this outage (red = now, orange = upcoming); the link keeps
+      # working for 7 days. Tapping the alert opens the outage's pop-up in
+      # Home Assistant: its map plus every detail (url = iOS, clickAction = Android).
       data: >-
-        {{ {'image': o.map_url} if o.map_url else {} }}
+        {% set ns = namespace(d={}) %}
+        {% if o.map_url %}{% set ns.d = dict(ns.d, image=o.map_url) %}{% endif %}
+        {% if o.detail_entity_id %}
+          {% set tap = '/?more-info-entity-id=' ~ o.detail_entity_id %}
+          {% set ns.d = dict(ns.d, url=tap, clickAction=tap) %}
+        {% endif %}
+        {{ ns.d }}
       # Every title names the location, so several locations can share
       # this one automation.
       title: >-

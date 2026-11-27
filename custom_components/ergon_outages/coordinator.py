@@ -9,14 +9,13 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE, CONF_RADIUS
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .api import ErgonApiError, async_query_outages
-from .maplinks import async_create_map_link
 from .const import (
     CONF_SCAN_INTERVAL,
     DEFAULT_RADIUS_M,
@@ -26,6 +25,7 @@ from .const import (
     EVENT_OUTAGE_CLEARED,
     EVENT_OUTAGE_STARTED,
     EVENT_OUTAGE_UPDATED,
+    OUTAGE_MAP_KEY_PREFIX,
     STORAGE_VERSION,
     storage_key,
 )
@@ -38,6 +38,8 @@ from .models import (
     diff_outages,
     parse_features,
 )
+from .maplinks import async_create_map_link
+from .renderer import MapRenderer
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -84,8 +86,7 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
         # stays None on the very first run so existing outages form a baseline.
         self._known: dict[str, dict[str, Any]] | None = None
         self._entities_ready = False
-        # Set by the image platform; used to render notification snapshots.
-        self.map_image: Any = None
+        self.map_renderer = MapRenderer(hass, self)
         self._pending_events: list[tuple[str, dict[str, Any]]] = []
 
     async def _async_setup(self) -> None:
@@ -138,25 +139,50 @@ class ErgonOutagesCoordinator(DataUpdateCoordinator[dict[str, Outage]]):
     def _async_fire_pending_events(self) -> None:
         if not self._pending_events:
             return
+        entry_id = self.config_entry.entry_id
+        ent_reg = er.async_get(self.hass)
         # Lets automations attach the map without hard-coding an entity ID.
-        map_entity_id = er.async_get(self.hass).async_get_entity_id(
-            "image", DOMAIN, f"{self.config_entry.entry_id}_outage_map"
-        )
+        map_entity_id = ent_reg.async_get_entity_id("image", DOMAIN, f"{entry_id}_outage_map")
         events, self._pending_events = self._pending_events, []
-        # One long-lived snapshot link per batch, for notification images.
-        map_url = (
-            async_create_map_link(self.hass, self.config_entry.entry_id)
-            if self.map_image is not None and any(kind != KIND_CLEARED for kind, _ in events)
-            else None
-        )
         for kind, summary in events:
+            active = kind != KIND_CLEARED
+            event_id = summary["event_id"]
             self.hass.bus.async_fire(
                 _EVENT_TYPES[kind],
                 {
-                    "config_entry_id": self.config_entry.entry_id,
+                    "config_entry_id": entry_id,
                     "location": self.config_entry.title,
                     "map_entity_id": map_entity_id,
-                    "map_url": map_url if kind != KIND_CLEARED else None,
+                    # Snapshot zoomed to this outage, for the notification image.
+                    "map_url": async_create_map_link(self.hass, entry_id, event_id) if active else None,
+                    # The outage's own map entity; its pop-up shows the map and
+                    # every detail. Used as the notification's tap target.
+                    "detail_entity_id": self._detail_entity_id(event_id) if active else None,
                     **summary,
                 },
             )
+
+    @callback
+    def _detail_entity_id(self, event_id: str) -> str | None:
+        """Entity ID of the outage's map image, registering it if needed.
+
+        The image platform adds the entity moments later; registering it now
+        fixes its entity ID so the notification can link to it straight away.
+        """
+        ent_reg = er.async_get(self.hass)
+        unique_id = f"{self.config_entry.entry_id}_{OUTAGE_MAP_KEY_PREFIX}{event_id}"
+        if entity_id := ent_reg.async_get_entity_id("image", DOMAIN, unique_id):
+            return entity_id
+        device = dr.async_get(self.hass).async_get_device(
+            identifiers={(DOMAIN, self.config_entry.entry_id)}
+        )
+        if device is None:
+            return None
+        return ent_reg.async_get_or_create(
+            "image",
+            DOMAIN,
+            unique_id,
+            config_entry=self.config_entry,
+            device_id=device.id,
+            suggested_object_id=f"{device.name_by_user or device.name} outage {event_id} map",
+        ).entity_id

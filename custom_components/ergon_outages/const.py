@@ -30,6 +30,10 @@ MAX_RADIUS_M: Final = 50_000
 
 STORAGE_VERSION: Final = 1
 
+# Unique-ID prefixes of the per-outage entities ("<entry_id>_<prefix><EVENT_ID>").
+OUTAGE_SENSOR_KEY_PREFIX: Final = "outage_"
+OUTAGE_MAP_KEY_PREFIX: Final = "outage_map_"
+
 # Bus events fired by the coordinator. Automations trigger on these.
 EVENT_NEW_OUTAGE: Final = f"{DOMAIN}_new_outage"
 EVENT_OUTAGE_STARTED: Final = f"{DOMAIN}_outage_started"
